@@ -135,7 +135,7 @@ export default async function btoRoutes(fastify: FastifyInstance) {
   })
 
   /** POST /api/bto/:id/approve-sdm — SDM approve/reject */
-  fastify.post('/:id/approve-sdm', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+  fastify.post('/:id/approve-sdm', { preHandler: [fastify.authenticateSdm] }, async (req, reply) => {
     const { id }     = req.params as { id: string }
     const { aksi, catatan } = z.object({ aksi: z.enum(['approve', 'reject']), catatan: z.string().optional() }).parse(req.body)
     const result = await sdmApproveService(id, aksi, { id: req.user.sub, nama: req.user.nama ?? '' }, catatan)

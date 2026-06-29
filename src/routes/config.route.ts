@@ -2,7 +2,7 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../db/connection';
-import { configPemberiTugas, configApproverSpdk } from '../db/schema';
+import { configPemberiTugas, configApproverSpdk, meetripUserRole } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { ok } from '../utils/response';
 import { AppError } from '../utils/errorHandler';
@@ -18,6 +18,11 @@ const spdkConfigSchema = z.object({
   mode: z.enum(['fixed_person', 'unit_head']),
   fixedEmployeeId: z.string().nullable().optional(),
   keterangan: z.string().optional(),
+});
+
+const userRoleSchema = z.object({
+  portalUserId: z.string().min(1),
+  role: z.enum(['admin', 'sdm']),
 });
 
 export default async function configRoutes(fastify: FastifyInstance) {
@@ -79,5 +84,37 @@ export default async function configRoutes(fastify: FastifyInstance) {
 
     const [updated] = await db.update(configApproverSpdk).set(values).where(eq(configApproverSpdk.id, row.id)).returning();
     return ok(updated);
+  });
+
+  // ─── MeeTrip User Role Management ──────────────────────────────────────────
+  /** GET /api/config/users-role — List all custom roles */
+  fastify.get('/users-role', { preHandler: [fastify.authenticateAdmin] }, async () => {
+    const rows = await db.select().from(meetripUserRole);
+    return ok(rows);
+  });
+
+  /** POST /api/config/users-role — Upsert custom user role */
+  fastify.post('/users-role', { preHandler: [fastify.authenticateAdmin] }, async (req, reply) => {
+    const { portalUserId, role } = userRoleSchema.parse(req.body);
+    const [existing] = await db.select().from(meetripUserRole).where(eq(meetripUserRole.portalUserId, portalUserId)).limit(1);
+
+    if (existing) {
+      const [updated] = await db.update(meetripUserRole)
+        .set({ role, updatedAt: new Date() })
+        .where(eq(meetripUserRole.id, existing.id))
+        .returning();
+      return reply.send(ok(updated));
+    }
+
+    const [inserted] = await db.insert(meetripUserRole).values({ portalUserId, role }).returning();
+    return reply.status(201).send(ok(inserted));
+  });
+
+  /** DELETE /api/config/users-role/:portalUserId — Remove custom user role */
+  fastify.delete('/users-role/:portalUserId', { preHandler: [fastify.authenticateAdmin] }, async (req, reply) => {
+    const { portalUserId } = req.params as { portalUserId: string };
+    const [deleted] = await db.delete(meetripUserRole).where(eq(meetripUserRole.portalUserId, portalUserId)).returning();
+    if (!deleted) throw new AppError('Role tidak ditemukan untuk user ini', 404);
+    return reply.send(ok({ message: 'Role berhasil dihapus, user kembali menjadi role default' }));
   });
 }

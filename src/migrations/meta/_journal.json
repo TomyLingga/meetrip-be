@@ -8,6 +8,13 @@
       "when": 1782716565104,
       "tag": "0000_cold_nighthawk",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1782717713362,
+      "tag": "0001_new_crusher_hogan",
+      "breakpoints": true
     }
   ]
 }

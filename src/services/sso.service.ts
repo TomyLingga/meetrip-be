@@ -1,7 +1,7 @@
 // ─── SSO Service ──────────────────────────────────────────────────────────────
 // Verifikasi sso_token ke portal, buat session JWT lokal MeeTrip
 import { db }      from '../db/connection'
-import { localUserCache, refreshToken } from '../db/schema'
+import { localUserCache, refreshToken, meetripUserRole } from '../db/schema'
 import { eq }      from 'drizzle-orm'
 import { config }  from '../config/env'
 import { AppError } from '../utils/errorHandler'
@@ -26,6 +26,21 @@ interface PortalUser {
   }
 }
 
+// Helper: Tentukan role spesifik MeeTrip
+async function getMeeTripRole(portalUserId: string, portalRole: string): Promise<string> {
+  const customRole = await db.query.meetripUserRole.findFirst({
+    where: eq(meetripUserRole.portalUserId, portalUserId),
+  })
+  if (customRole) {
+    return customRole.role // 'admin' | 'sdm'
+  }
+  // Default fallback: Portal super_admin/admin adalah MeeTrip admin
+  if (['super_admin', 'admin'].includes(portalRole)) {
+    return 'admin'
+  }
+  return 'user' // User biasa
+}
+
 // ─── Verifikasi SSO Token ke portal ──────────────────────────────────────────
 export async function loginSsoService(
   ssoToken: string,
@@ -46,12 +61,15 @@ export async function loginSsoService(
 
   const { data: portalUser }: { data: PortalUser } = await portalRes.json()
 
+  // Ambil MeeTrip role
+  const meeTripRole = await getMeeTripRole(portalUser.id, portalUser.role)
+
   // 2. Upsert local_user_cache
   const emp = portalUser.employee
   const cacheData = {
     portalUserId:       portalUser.id,
     email:              portalUser.email,
-    role:               portalUser.role,
+    role:               meeTripRole, // simpan role MeeTrip di local cache
     nama:               emp?.namaLengkap ?? null,
     employeeId:         emp?.id          ?? null,
     gradeKode:          emp?.grade?.kode ?? null,
@@ -89,7 +107,7 @@ export async function loginSsoService(
     employeeId: emp?.id          ?? null,
     nama:       emp?.namaLengkap ?? null,
     gradeLevel: emp?.grade?.level ?? null,
-    role:       portalUser.role,
+    role:       meeTripRole,
   }
 
   const accessToken  = fastify.jwt.sign(payload, { expiresIn: config.jwt.expiresIn })
@@ -109,7 +127,7 @@ export async function loginSsoService(
     user: {
       id:         portalUser.id,
       email:      portalUser.email,
-      role:       portalUser.role,
+      role:       meeTripRole,
       nama:       emp?.namaLengkap ?? null,
       gradeLevel: emp?.grade?.level ?? null,
     },
@@ -135,13 +153,16 @@ export async function refreshSsoTokenService(
   })
   if (!userCache) throw new AppError('User tidak ditemukan', 401)
 
+  // Ambil MeeTrip role ter-update
+  const meeTripRole = await getMeeTripRole(userCache.portalUserId, userCache.role ?? 'user')
+
   const payload = {
     sub:        userCache.portalUserId,
     email:      userCache.email,
     employeeId: userCache.employeeId,
     nama:       userCache.nama,
     gradeLevel: userCache.gradeLevel,
-    role:       userCache.role,
+    role:       meeTripRole,
   }
 
   const newAccessToken = fastify.jwt.sign(payload, { expiresIn: config.jwt.expiresIn })

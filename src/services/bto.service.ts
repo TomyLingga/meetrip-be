@@ -149,6 +149,11 @@ export async function sdmApproveService(id: string, aksi: 'approve' | 'reject', 
   const [existing] = await db.select().from(bto).where(eq(bto.id, id)).limit(1)
   if (!existing) throw new AppError('BTO tidak ditemukan', 404)
   if (existing.status !== 'SDM_REVIEW') throw new AppError('Bukan tahap SDM review', 400)
+  
+  // SDM tidak boleh menyetujui pengajuannya sendiri
+  if (existing.employeeId === actor.id) {
+    throw new AppError('Anda tidak dapat menyetujui pengajuan perjalanan dinas Anda sendiri', 400)
+  }
 
   const nextStatus = aksi === 'approve' ? 'SPDK_DRAFT' : 'REJECTED'
 

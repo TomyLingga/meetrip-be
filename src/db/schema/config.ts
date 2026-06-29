@@ -66,3 +66,14 @@ export const refreshToken = pgTable('refresh_token', {
   expiresAt:   timestamp('expires_at', { withTimezone: true }).notNull(),
   createdAt:   timestamp('created_at', { withTimezone: true }).defaultNow(),
 })
+
+// ─── meetrip_user_role ────────────────────────────────────────────────────────
+// Role spesifik MeeTrip: 'admin' atau 'sdm'. Jika tidak ada record, default 'user' (biasa).
+export const meetripUserRole = pgTable('meetrip_user_role', {
+  id:           uuid('id').primaryKey().$defaultFn(genUUID),
+  portalUserId: varchar('portal_user_id', { length: 100 }).notNull().unique(),
+  role:         varchar('role', { length: 50 }).notNull(), // 'admin' | 'sdm'
+  createdAt:    timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt:    timestamp('updated_at', { withTimezone: true }).defaultNow(),
+})
+
