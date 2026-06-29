@@ -17,7 +17,10 @@ export async function reverseGeocode(lat: number, lng: number): Promise<GeoResul
 
   const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${config.googleMaps.apiKey}&language=id`
   const res  = await fetch(url)
-  const json = await res.json()
+  const json = await res.json() as {
+    status: string
+    results: Array<{ formatted_address: string; address_components: Array<{ long_name: string; types: string[] }> }>
+  }
 
   if (json.status !== 'OK' || !json.results?.length) {
     return { alamat: `${lat},${lng}`, provinsi: null, negara: null }

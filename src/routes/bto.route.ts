@@ -80,6 +80,8 @@ export default async function btoRoutes(fastify: FastifyInstance) {
     const data = btoCreateSchema.partial().parse(req.body)
     const result = await updateBtoService(id, req.user.sub, isAdmin, {
       ...data,
+      tujuanLat:    data.tujuanLat != null ? String(data.tujuanLat) : undefined,
+      tujuanLng:    data.tujuanLng != null ? String(data.tujuanLng) : undefined,
       estBerangkat: data.estBerangkat ? new Date(data.estBerangkat) : undefined,
       estKembali:   data.estKembali   ? new Date(data.estKembali)   : undefined,
     })
@@ -179,7 +181,7 @@ export default async function btoRoutes(fastify: FastifyInstance) {
       const portalRes = await fetch(`${config.portal.apiUrl}/api/employees?id=${cfg.fixedEmployeeId}`, {
         headers: { 'x-internal': '1' },
       })
-      const data = await portalRes.json().catch(() => ({ data: [] }))
+      const data = await portalRes.json().catch(() => ({ data: [] })) as { data: any[] }
       return reply.send(ok({ mode: 'fixed_person', options: data.data ?? [] }))
     }
 
@@ -188,7 +190,7 @@ export default async function btoRoutes(fastify: FastifyInstance) {
     const portalRes  = await fetch(`${config.portal.apiUrl}/api/employees?minGradeLevel=${gradeLevel + 1}`, {
       headers: { 'x-internal': '1' },
     })
-    const data = await portalRes.json().catch(() => ({ data: [] }))
+    const data = await portalRes.json().catch(() => ({ data: [] })) as { data: any[] }
     return reply.send(ok({ mode: 'grade_based', options: data.data ?? [] }))
   })
 }

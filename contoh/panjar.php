@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html>
+<head>
+        <title>Surat Pengajuan Panjar</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/css/bootstrap.min.css" integrity="sha384-zCbKRCUGaJDkqS1kPbPd7TveP5iyJE0EjAuZQTgFLD2ylzuqKfdKlfG/eSrtxUkn" crossorigin="anonymous">
+</head>
+<style type="text/css">
+        .under{
+                text-decoration: underline;
+        }
+        .font{
+                font-family:sans-serif;
+                font-size: 12.5px;
+                color: black;
+        }
+        .bold{
+                font-weight: bold;
+        }
+</style>
+<body style="margin: -15px -26px 0px 0px;">
+        <div style="padding:10px; border:2px solid;">
+                <table class="" width="100%">
+                        <thead>
+                                <tr class="text-center">
+                                        <td class="border border-dark" rowspan="4">
+                                                <img src="storage/upload/surat/inl.png" width="83">
+                                        </td>
+                                        <td class="border border-dark text-center" rowspan="3">
+                                                <strong style="text-decoration: underline; font-size:16px;">PT. INDUSTRI NABATI LESTARI</strong><br>
+                                                <label style="font-size:12px;">PABRIK MINYAK GORENG</label><br>
+                                                <label style="font-size:8px;"><strong>Kantor Pusat:</strong> Komp. KEK Sei Mangkei, Kav.2-3, Kec. Bosar Maligas, Kab. Simalungun, Sumatera Utara, 21184</label>
+                                        </td>
+                                        <th class="border border-dark">
+                                                <strong style="font-size:10px;">No. Dokumen</strong>
+                                        </th>
+                                        <th class="border border-dark">
+                                                <strong style="font-size:10px;">Tgl. Berlaku</strong>
+                                        </th>
+                                </tr>
+                                <tr class="text-center">
+                                        <td class="border border-dark">
+                                                <label style="font-size:10px;">INLHO/BSIS-GEA/F-014</label>
+                                        </td>
+                                        <td class="border border-dark">
+                                                <label style="font-size:10px;">21-Mar-22</label>
+                                        </td>
+                                </tr>
+                                <tr>
+                                        <th class="border border-dark">
+                                                <strong style="font-size:10px;">No.Revisi</strong>
+                                        </th>
+                                        <th class="border border-dark">
+                                                <strong style="font-size:10px;">Halaman</strong>
+                                        </th>
+                                </tr>
+                                <tr class="text-center">
+                                        <th class="border border-dark">
+                                                <strong style="font-size:14px;">DETAIL OF DOWN PAYMENT (DP)</strong>
+                                        </th>
+                                        <td class="border border-dark">
+                                                <label style="font-size:10px;">01</label>
+                                        </td>
+                                        <td class="border border-dark">
+                                                <label style="font-size:10px;">1 dari 1</label>
+                                        </td>
+                                </tr>
+                        </thead>
+                </table>
+                <table class="mt-3" width="100%">
+                        <tbody>
+                                <tr class="border border-dark" style="font-size:10px;">
+                                        <td class="border border-dark text-center" width="4%">I</td>
+                                        <!-- <td></td> -->
+                                        <td style="font-style: italic;" width="15%" colspan="3"><strong>SPJ/BTO NUMBER</strong></td>
+                                        @if($form->nomor_surat == '0')
+                                        <td colspan="4">: &nbsp; SURAT BELUM DI TERBITKAN</td>
+                                        @else
+                                        <td colspan="4">: &nbsp; {{$form->nomor_surat}}</td>
+                                        @endif
+                                </tr>
+                                <tr class="border border-dark" style="font-size:10px;">
+                                        <td class="border border-dark text-center">II</td>
+                                        <!-- <td></td> -->
+                                        <td style="font-style: italic;" colspan="3"><strong>NAME</strong></td>
+                                        <td colspan="4">: &nbsp; {{strtoupper($form->nama_pelaksana)}}</td>
+                                </tr>
+                                <tr class="border border-dark" style="font-size:10px;">
+                                        <td class="border border-dark text-center">III</td>
+                                        <!-- <td></td> -->
+                                        <td style="font-style: italic;" colspan="3"><strong>POSITION</strong></td>
+                                        @if($form->jabatan == 'Direktur Utama')
+                                        <td colspan="4">: &nbsp; DIREKTUR</td>
+                                        @elseif($form->jabatan == 'General Manager')
+                                        <td colspan="4">: &nbsp; {{strtoupper($form->jabatan)}} {{strtoupper($form->divisi)}}</td>
+                                        @else
+                                        <td colspan="4">: &nbsp; {{strtoupper($form->jabatan)}}</td>
+                                        @endif
+                                </tr>
+                <tr class="border border-dark" style="font-size:10px;">
+                                        <td class="border border-dark text-center">IV</td>
+                                        <!-- <td></td> -->
+                                        <td style="font-style: italic;" colspan="3"><strong>JOB LEVEL</strong></td>
+                    @if($joblevel->grade == '1')
+                                        <td colspan="4">: &nbsp; JUNIOR STAFF/EQUAL</td>
+                                        @elseif($joblevel->grade == '2')
+                                        <td colspan="4">: &nbsp; STAFF/EQUAL</td>
+                                        @elseif($joblevel->grade == '3')
+                                        <td colspan="4">: &nbsp; SENIOR STAFF/EQUAL</td>
+                                        @elseif($joblevel->grade == '4')
+                                        <td colspan="4">: &nbsp; EXECUTIVE/EQUAL</td>
+                                        @elseif($joblevel->grade == '5')
+                                        <td colspan="4">: &nbsp; GENERAL MANAGER/EQUAL</td>
+                                        @elseif($joblevel->grade == '6')
+                                        <td colspan="4">: &nbsp; DIRECTOR/EQUAL</td>
+                                        @elseif($joblevel->grade == '13')
+                                        <td colspan="4">: &nbsp; SEVP/COMMISSIONER/EQUAL</td>
+                                        @endif
+                                </tr>
+                                <tr class="border border-dark" style="font-size:10px;">
+                                        <td class="border border-dark text-center">V</td>
+                                        <!-- <td></td> -->
+                                        <td style="font-style: italic;" colspan="3"><strong>DESTINATION</strong></td>
+                                        <td colspan="4">: &nbsp; {{strtoupper($form->tujuan)}}</td>
+                                </tr>
+                                <tr class="border border-dark" style="font-size:10px;">
+                                        <td class="border border-dark text-center">VI</td>
+                                        <!-- <td></td> -->
+                                        <td style="font-style: italic;" colspan="3"><strong>NECESSARY</strong></td>
+                                        <td colspan="4">:  &nbsp; {{strtoupper($form->keperluan)}}</td>
+                                </tr>
+                                <tr class="border border-dark" style="font-size:10px;">
+                                        <td class="border border-dark text-center">VII</td>
+                                        <!-- <td></td> -->
+                                        <td style="font-style: italic;" colspan="3"><strong>TOTAL DAYS</strong></td>
+                                        <td colspan="4">: &nbsp; {{strtoupper($form->lama_hari)}} HARI</td>
+                                </tr>
+                                <tr class="border border-dark" style="font-size:10px;">
+                                        <td class="border border-dark text-center">VIII</td>
+                                        <!-- <td></td> -->
+                                        <td style="font-style: italic;" colspan="3"><strong>PERIODE</strong></td>
+                                        <td colspan="4"></td>
+                                </tr>
+                                <tr class="border border-dark" style="font-size:10px;">
+                                        <td class="border border-dark text-center" rowspan="2"></td>
+                                        <td class="border border-dark text-center" width="4%">VIII.1</td>
+                                        <td style="font-style: italic;" colspan="2"><strong>START</strong></td>
+                                        <td colspan="4">: &nbsp; {{strtoupper(Carbon\Carbon::parse($form->tgl_pergi)->locale('id_ID')->isoFormat('LL'))}}</td>
+                                </tr>
+                                <tr class="border border-dark" style="font-size:10px;">
+                                        <td class="border border-dark text-center">VIII.2</td>
+                                        <td style="font-style: italic;" colspan="2"><strong>END</strong></td>
+                                        <td colspan="4">: &nbsp; {{strtoupper(Carbon\Carbon::parse($form->tgl_sampai)->locale('id_ID')->isoFormat('LL'))}}</td>
+                                </tr>
+                                <tr class="border border-dark" style="font-size:10px;">
+                                        <td class="border border-dark text-center">IX</td>
+                                        <!-- <td></td> -->
+                                        <td style="font-style: italic;" colspan="3"><strong>DESCRIPTION OF SCHEDULE</strong></td>
+                                        <td colspan="4"></td>
+                                </tr>
+                                <tr class="border border-dark" style="font-size:10px;">
+                                        <td class="border border-dark text-center" rowspan="4"></td>
+                                        <td class="border border-dark text-center" width="5%">IX.1</td>
+                                        <td style="font-style: italic;" colspan="2"><strong>DEPARTURE DATE</strong></td>
+                                        <td colspan="4">: &nbsp; {{strtoupper(Carbon\Carbon::parse($form->tgl_pergi)->locale('id_ID')->isoFormat('LL'))}}</td>
+                                </tr>
+                                <tr class="border border-dark" style="font-size:10px;">
+                                        <td class="border border-dark text-center">IX.2</td>
+                                        <td style="font-style: italic;" colspan="2"><strong>DEPARTURE TIME</strong></td>
+                                        <td colspan="4">: &nbsp; {{$form->jam_pergi}}</td>
+                                </tr>
+                                <tr class="border border-dark" style="font-size:10px;">
+                                        <td class="border border-dark text-center">IX.3</td>
+                                        <td style="font-style: italic;" colspan="2"><strong>ARRIVAL DATE</strong></td>
+                                        <td colspan="4">: &nbsp; {{strtoupper(Carbon\Carbon::parse($form->tgl_sampai)->locale('id_ID')->isoFormat('LL'))}}</td>
+                                </tr>
+                                <tr class="border border-dark" style="font-size:10px;">
+                                        <td class="border border-dark text-center">IX.4</td>
+                                        <td style="font-style: italic;" colspan="2"><strong>ARRIVAL TIME</strong></td>
+                                        <td colspan="4">: &nbsp; {{$form->jam_sampai}}</td>
+                                </tr>
+                                @if($panjar != null)
+                                        <tr class="border border-dark" style="font-size:10px;">
+                                                <td class="border border-dark text-center">X</td>
+                                                <!-- <td></td> -->
+                                                <td style="font-style: italic;" colspan="3"><strong>DETAIL OF TRAVEL EXPENSES</strong></td>
+                                                <td colspan="4"></td>
+                                        </tr>
+                                        <tr class="border border-dark" style="font-size:10px;">
+                                                <td class="border border-dark text-center" rowspan="17"></td>
+                                                <td class="border border-dark text-center">X.1</td>
+                                                @if($form->wilayah == 'dalam wilayah')
+                                                <td style="font-style: italic;" colspan="2"><strong>INSIDE OF THE REGION</strong></td>
+                                                @else
+                                                <td style="font-style: italic;" colspan="2"><strong>OUTSIDE OF THE REGION</strong></td>
+                                                @endif
+                                                <td colspan="4"></td>
+                                        </tr>
+                                        <tr class="border border-dark" style="font-size:10px;">
+                                                <td class="border border-dark text-center" rowspan="16"></td>
+                                                <td class="border border-dark text-center" width="8%"><strong>Number</strong></td>
+                                                <td class="border border-dark text-center" colspan="3"><strong>Expenditure</strong></td>
+                                                <!-- <td class="border border-dark text-center"><strong>Unit Price</strong></td>
+                                                <td class="border border-dark text-center"><strong>Expenditure Intensity</strong></td> -->
+                                                <td class="border border-dark text-center" colspan="2"><strong>Total Price</strong></td>
+                                        </tr>
+                                        <tr class="border border-dark" style="font-size:10px;">
+                                                <td class="border border-dark text-center">X.1.1</td>
+                                                <td class="border border-dark" colspan="3" style="padding-left:3%;">MEAL ALLOWANCE</td>
+                                                <!-- <td class="border border-dark text-center"></td>
+                                                <td class="border border-dark text-center"></td> -->
+                                                <td class="border border-dark text-center" colspan="2"></td>
+                                        </tr>
+                                        <tr class="border border-dark" style="font-size:10px;">
+                                                <td class="border border-dark text-center" rowspan="3"></td>
+                                                <td class="border border-dark text-center" width="13%">X.1.1.1</td>
+                                                <td class="border border-dark" width="14%" colspan="2"style="padding-left:3%;">BREAKFAST</td>
+                                                <!-- <td class="border border-dark text-center"></td>
+                                                <td class="border border-dark text-center"></td> -->
+                                                <td class="border border-dark" style="text-align:right; padding-right:3%;" colspan="2">Rp {{number_format($panjar->sarapan,0,',','.')}}</td>
+                                        </tr>
+                                        <tr class="border border-dark" style="font-size:10px;">
+                                                <td class="border border-dark text-center" width="10%">X.1.1.2</td>
+                                                <td class="border border-dark" width="14%" colspan="2"style="padding-left:3%;">LUNCH</td>
+                                                <!-- <td class="border border-dark text-center"></td>
+                                                <td class="border border-dark text-center"></td> -->
+                                                <td class="border border-dark" style="text-align:right; padding-right:3%;" colspan="2">Rp {{number_format($panjar->makan_siang,0,',','.')}}</td>
+                                        </tr>
+                                        <tr class="border border-dark" style="font-size:10px;">
+                                                <td class="border border-dark text-center" width="10%">X.1.1.3</td>
+                                                <td class="border border-dark" width="14%" colspan="2"style="padding-left:3%;">DINNER</td>
+                                                <!-- <td class="border border-dark text-center"></td>
+                                                <td class="border border-dark text-center"></td> -->
+                                                <td class="border border-dark" style="text-align:right; padding-right:3%;; padding-right:3%;" colspan="2">Rp {{number_format($panjar->makan_malam,0,',','.')}}</td>
+                                        </tr>
+                                        <tr class="border border-dark" style="font-size:10px;">
+                                                <td class="border border-dark text-center">X.1.2</td>
+                                                <td class="border border-dark" colspan="3"style="padding-left:3%;">POCKET MONEY</td>
+                                                <!-- <td class="border border-dark text-center"></td>
+                                                <td class="border border-dark text-center"></td> -->
+                                                <td class="border border-dark" style="text-align:right; padding-right:3%;; padding-right:3%;" colspan="2">Rp {{number_format($panjar->saku,0,',','.')}}</td>
+                                        </tr>
+                                        <tr class="border border-dark" style="font-size:10px;">
+                                                <td class="border border-dark text-center">X.1.3</td>
+                                                <td class="border border-dark" colspan="3"style="padding-left:3%;">TRANSPORTATION</td>
+                                                <!-- <td class="border border-dark text-center"></td>
+                                                <td class="border border-dark text-center"></td> -->
+                                                <td class="border border-dark text-center" colspan="2"></td>
+                                        </tr>
+                                        <tr class="border border-dark" style="font-size:10px;">
+                                                <td class="border border-dark text-center"></td>
+                                                <td class="border border-dark text-center" width="13%">X.1.3.1</td>
+                                                <td class="border border-dark" width="14%" colspan="2"style="padding-left:3%;">OFFICIAL CAR</td>
+                                                <!-- <td class="border border-dark text-center"></td>
+                                                <td class="border border-dark text-center"></td> -->
+                                                <td class="border border-dark" style="text-align:right; padding-right:3%;" colspan="2">Rp {{number_format($panjar->official,0,',','.')}}</td>
+                                        </tr>
+                                        <tr class="border border-dark" style="font-size:10px;">
+                                                <td class="border border-dark text-center"></td>
+                                                <td class="border border-dark text-center" width="13%">X.1.3.2</td>
+                                                <td class="border border-dark" width="14%" colspan="2"style="padding-left:3%;">25 - 100 KM</td>
+                                                <!-- <td class="border border-dark text-center"></td>
+                                                <td class="border border-dark text-center"></td> -->
+                                                <td class="border border-dark" style="text-align:right; padding-right:3%;" colspan="2">Rp {{number_format($panjar->dualima,0,',','.')}}</td>
+                                        </tr>
+                                        <tr class="border border-dark" style="font-size:10px;">
+                                                <td class="border border-dark text-center"></td>
+                                                <td class="border border-dark text-center" width="13%">X.1.3.3</td>
+                                                <td class="border border-dark" width="14%" colspan="2"style="padding-left:3%;">101 - 200 KM</td>
+                                                <!-- <td class="border border-dark text-center"></td>
+                                                <td class="border border-dark text-center"></td> -->
+                                                <td class="border border-dark" style="text-align:right; padding-right:3%;" colspan="2">Rp {{number_format($panjar->seratussatu,0,',','.')}}</td>
+                                        </tr>
+                                        <tr class="border border-dark" style="font-size:10px;">
+                                                <td class="border border-dark text-center"></td>
+                                                <td class="border border-dark text-center" width="13%">X.1.3.4</td>
+                                                <td class="border border-dark" width="14%" colspan="2"style="padding-left:3%;">> 200 KM</td>
+                                                <!-- <td class="border border-dark text-center"></td>
+                                                <td class="border border-dark text-center"></td> -->
+                                                <td class="border border-dark" style="text-align:right; padding-right:3%;" colspan="2">Rp {{number_format($panjar->duaratus,0,',','.')}}</td>
+                                        </tr>
+                                        <tr class="border border-dark" style="font-size:10px;">
+                                                <td class="border border-dark text-center">X.1.4</td>
+                                                <td class="border border-dark" colspan="3"style="padding-left:3%;">HOTEL</td>
+                                                <!-- <td class="border border-dark text-center"></td>
+                                                <td class="border border-dark text-center"></td> -->
+                                                <td class="border border-dark" style="text-align:right; padding-right:3%;" colspan="2">Rp {{number_format($panjar->hotel,0,',','.')}}</td>
+                                        </tr>
+                                        <tr class="border border-dark" style="font-size:10px;">
+                                                <td class="border border-dark text-center">X.1.5</td>
+                                                <td class="border border-dark" colspan="3"style="padding-left:3%;">LAUNDRY</td>
+                                                <!-- <td class="border border-dark text-center"></td>
+                                                <td class="border border-dark text-center"></td> -->
+                                                <td class="border border-dark" style="text-align:right; padding-right:3%;" colspan="2">Rp {{number_format($panjar->laundry,0,',','.')}}</td>
+                                        </tr>
+                                        <tr class="border border-dark" style="font-size:10px;">
+                                                <td class="border border-dark text-center">X.1.6</td>
+                                                <td class="border border-dark" colspan="3"style="padding-left:3%;">LOCAL TRANSPORTATION</td>
+                                                <!-- <td class="border border-dark text-center"></td>
+                                                <td class="border border-dark text-center"></td> -->
+                                                <td class="border border-dark" style="text-align:right; padding-right:3%;" colspan="2">Rp {{number_format($panjar->transport_dilokasi,0,',','.')}}</td>
+                                        </tr>
+                                        <tr class="border border-dark" style="font-size:10px;">
+                                                <td class="border border-dark text-center">X.1.7</td>
+                                                <td class="border border-dark" colspan="3"style="padding-left:3%;">TICKET</td>
+                                                <!-- <td class="border border-dark text-center"></td>
+                                                <td class="border border-dark text-center"></td> -->
+                                                <td class="border border-dark" style="text-align:right; padding-right:3%;" colspan="2">Rp {{number_format($panjar->tiket,0,',','.')}}</td>
+                                        </tr>
+                                        <tr class="border border-dark" style="font-size:10px;">
+                                                <td class="border border-dark text-center">X.1.8</td>
+                                                <td class="border border-dark" colspan="3"style="padding-left:3%;">COMMUNICATION</td>
+                                                <!-- <td class="border border-dark text-center"></td>
+                                                <td class="border border-dark text-center"></td> -->
+                                                <td class="border border-dark" style="text-align:right; padding-right:3%;" colspan="2">Rp {{number_format($panjar->komunikasi,0,',','.')}}</td>
+                                        </tr>
+                                        <tr class="border border-dark" style="font-size:10px;">
+                                                <td class="border border-dark text-center"></td>
+                                                <td class="border border-dark text-center">X.2</td>
+                                                <td style="font-style: italic;" colspan="4" style="padding-left:3%;"><strong>TO THE AIRPORT</strong></td>
+                                                <td class="border border-dark" style="text-align:right; padding-right:3%;" colspan="2">Rp {{number_format((int)$panjar->airport,0,',','.')}}</td>
+                                        </tr>
+                                        <tr class="border border-dark" style="font-size:10px;">
+                                                <!-- <td></td> -->
+                                                <td class="border border-dark text-center" style="font-style: italic;" colspan="7"><strong>TOTAL</strong></td>
+                                                <!-- <td colspan="3"></td> -->
+                                                <td class="border border-dark" style="text-align:right; padding-right:5%;font-weight:bold">Rp {{number_format($panjar->total_panjar,0,',','.')}}</td>
+                                        </tr>
+                                @endif
+                        </tbody>
+                </table>
+                <table width="100%" class="mt-5">
+                        <thead>
+                                <tr>
+                                        <td width="60%">
+                                                <label style="font-size:11px;"></label>
+                                        </td>
+                                        <td class="text-center">
+                                                <label style="font-size:11px;">Sign by Personalia: <strong style="font-style:italic;">GA Administrator</strong></label>
+                                        </td>
+                                </tr>
+                        </thead>
+                </table>
+        </div>
+
+        <div style="position: fixed; bottom: 20px; left: -25px; right: 0px; height: 50px;">
+                <table width="100%">
+                        <tr>
+                                <td>
+                                        <img src="storage/upload/surat/footer.PNG" width="760">
+
+                                </td>
+                        </tr>
+                </table>
+        </div>
+        <script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/js/bootstrap.bundle.min.js" integrity="sha384-fQybjgWLrvvRgtW6bFlB7jaZrFsaBXjsOMm/tB9LTS58ONXgqbR9W8oWht/amnpF" crossorigin="anonymous"></script>
+</body>
+</html>

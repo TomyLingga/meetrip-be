@@ -10,17 +10,22 @@ export interface JwtPayload {
   employeeId: string | null
   nama:       string | null
   gradeLevel: number | null
-  role:       string | null
+  role:       string
+}
+
+// Augment @fastify/jwt — cara resmi agar request.user bertipe JwtPayload
+declare module '@fastify/jwt' {
+  interface FastifyJWT {
+    payload: JwtPayload     // type untuk sign()
+    user:    JwtPayload     // type untuk request.user setelah jwtVerify()
+  }
 }
 
 declare module 'fastify' {
   interface FastifyInstance {
-    authenticate: (req: FastifyRequest, reply: FastifyReply) => Promise<void>
+    authenticate:      (req: FastifyRequest, reply: FastifyReply) => Promise<void>
     authenticateAdmin: (req: FastifyRequest, reply: FastifyReply) => Promise<void>
-    authenticateSdm: (req: FastifyRequest, reply: FastifyReply) => Promise<void>
-  }
-  interface FastifyRequest {
-    user: JwtPayload
+    authenticateSdm:   (req: FastifyRequest, reply: FastifyReply) => Promise<void>
   }
 }
 

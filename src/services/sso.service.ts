@@ -6,6 +6,7 @@ import { eq }      from 'drizzle-orm'
 import { config }  from '../config/env'
 import { AppError } from '../utils/errorHandler'
 import crypto      from 'crypto'
+import type { FastifyInstance } from 'fastify'
 
 // ─── Tipe data user dari portal (response /api/sso/verify) ───────────────────
 interface PortalUser {
@@ -27,25 +28,19 @@ interface PortalUser {
 }
 
 // Helper: Tentukan role spesifik MeeTrip
-async function getMeeTripRole(portalUserId: string, portalRole: string): Promise<string> {
+// HANYA dari tabel meetrip_user_role. Jika tidak ada record → default 'user'.
+async function getMeeTripRole(portalUserId: string): Promise<string> {
   const customRole = await db.query.meetripUserRole.findFirst({
     where: eq(meetripUserRole.portalUserId, portalUserId),
   })
-  if (customRole) {
-    return customRole.role // 'admin' | 'sdm'
-  }
-  // Default fallback: Portal super_admin/admin adalah MeeTrip admin
-  if (['super_admin', 'admin'].includes(portalRole)) {
-    return 'admin'
-  }
-  return 'user' // User biasa
+  return customRole ? customRole.role : 'user'
 }
 
 // ─── Verifikasi SSO Token ke portal ──────────────────────────────────────────
 export async function loginSsoService(
   ssoToken: string,
   appId: string,
-  fastify: { jwt: { sign: (payload: object, opts?: object) => string } },
+  fastify: FastifyInstance,
 ) {
   // 1. Verifikasi token ke portal
   const portalRes = await fetch(`${config.portal.apiUrl}/api/sso/verify`, {
@@ -59,10 +54,11 @@ export async function loginSsoService(
     throw new AppError((body as any).error ?? 'SSO token tidak valid', 401)
   }
 
-  const { data: portalUser }: { data: PortalUser } = await portalRes.json()
+  const resBody = await portalRes.json() as { data: PortalUser }
+  const portalUser = resBody.data
 
   // Ambil MeeTrip role
-  const meeTripRole = await getMeeTripRole(portalUser.id, portalUser.role)
+  const meeTripRole = await getMeeTripRole(portalUser.id)
 
   // 2. Upsert local_user_cache
   const emp = portalUser.employee
@@ -137,7 +133,7 @@ export async function loginSsoService(
 // ─── Refresh Token ────────────────────────────────────────────────────────────
 export async function refreshSsoTokenService(
   token: string,
-  fastify: { jwt: { sign: (payload: object, opts?: object) => string } },
+  fastify: FastifyInstance,
 ) {
   const [rt] = await db.select()
     .from(refreshToken)
@@ -154,7 +150,7 @@ export async function refreshSsoTokenService(
   if (!userCache) throw new AppError('User tidak ditemukan', 401)
 
   // Ambil MeeTrip role ter-update
-  const meeTripRole = await getMeeTripRole(userCache.portalUserId, userCache.role ?? 'user')
+  const meeTripRole = await getMeeTripRole(userCache.portalUserId)
 
   const payload = {
     sub:        userCache.portalUserId,
