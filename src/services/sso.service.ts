@@ -7,13 +7,7 @@ import { config }  from '../config/env'
 import { AppError } from '../utils/errorHandler'
 import crypto      from 'crypto'
 import type { FastifyInstance } from 'fastify'
-<<<<<<< HEAD
-<<<<<<< HEAD
-import type { JwtPayload } from '../plugins/auth'
-=======
->>>>>>> 5d5d434c55b7461215871bb68626e73dea59eb98
-=======
->>>>>>> 5d5d434c55b7461215871bb68626e73dea59eb98
+import type { JwtPayload }      from '../plugins/auth'
 
 // ─── Tipe data user dari portal (response /api/sso/verify) ───────────────────
 interface PortalUser {
@@ -65,17 +59,8 @@ export async function loginSsoService(
     throw new AppError((body as any).error ?? 'SSO token tidak valid', 401)
   }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-  const { data: portalUser } = await portalRes.json() as PortalVerifyResponse
-=======
   const resBody = await portalRes.json() as { data: PortalUser }
   const portalUser = resBody.data
->>>>>>> 5d5d434c55b7461215871bb68626e73dea59eb98
-=======
-  const resBody = await portalRes.json() as { data: PortalUser }
-  const portalUser = resBody.data
->>>>>>> 5d5d434c55b7461215871bb68626e73dea59eb98
 
   // Ambil MeeTrip role
   const meeTripRole = await getMeeTripRole(portalUser.id)
