@@ -51,6 +51,13 @@ export async function createOrUpdateDpService(
 
   // Calculate totals
   data.rincian.forEach((r) => {
+    // Validate value against pagu
+    if (r.paguSaatInput && !r.isUnlimited) {
+      if (Number(r.nilaiTotal) > Number(r.paguSaatInput)) {
+        throw new AppError(`Pengajuan biaya '${r.rincianLabel}' sebesar ${r.nilaiTotal} melebihi pagu sebesar ${r.paguSaatInput}`, 400);
+      }
+    }
+
     if (r.useDollar) {
       const valUsd = Number(r.nilaiUsd || r.nilaiTotal);
       totalUsd += valUsd;

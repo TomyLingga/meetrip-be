@@ -18,8 +18,36 @@ export async function issueSpdkService(btoId: string, actor: { id: string; nama:
   let approverKabagId: string | null = null
   if (cfg?.mode === 'fixed_person') {
     approverKabagId = cfg.fixedEmployeeId ?? null
+  } else if (cfg?.mode === 'unit_head') {
+    const userCache = await db.query.localUserCache.findFirst({
+      where: eq(localUserCache.portalUserId, btoRow.employeeId),
+    })
+    if (userCache?.employeeId) {
+      try {
+        const employeeRes = await fetch(`${appConfig.portal.apiUrl}/api/employees/${userCache.employeeId}`)
+        if (employeeRes.ok) {
+          const employeeData = await employeeRes.json() as any
+          const atasanId = employeeData.data?.atasanId
+          if (atasanId) {
+            const atasanUserRes = await fetch(`${appConfig.portal.apiUrl}/api/sso/employees?id=${atasanId}`, {
+              headers: { 'x-internal': '1' },
+            })
+            if (atasanUserRes.ok) {
+              const atasanUserData = await atasanUserRes.json() as any
+              if (atasanUserData.data && atasanUserData.data.length > 0) {
+                approverKabagId = atasanUserData.data[0].id
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to resolve manager from Portal SSO:', err)
+      }
+    }
+    if (!approverKabagId) {
+      approverKabagId = cfg?.fixedEmployeeId ?? null
+    }
   }
-  // mode='unit_head' → cari kepala unit user (bisa diimplementasi lebih lanjut)
 
   // Cek apakah pemberi tugas = approver Kabag → auto approve
   const autoApprove = btoRow.pemberiTugasId === approverKabagId
@@ -127,6 +155,9 @@ export async function attendStampService(
     jarakM   = jarakKm * 1000
     // Baca radius dari config
     isValid  = jarakM <= appConfig.attend.radiusMeter
+    if (!isValid) {
+      throw new AppError(`Geofence validation failed. Anda berada ${jarakM.toFixed(0)}m dari lokasi tujuan, sedangkan batas maksimum adalah ${appConfig.attend.radiusMeter}m.`, 400)
+    }
   }
 
   const [stamp] = await db.insert(attendStamp).values({

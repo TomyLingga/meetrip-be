@@ -215,9 +215,11 @@ export default async function btoRoutes(fastify: FastifyInstance) {
 
     const estBerangkat = new Date(btoRow.estBerangkat)
     const estKembali   = new Date(btoRow.estKembali)
-    const diffMs       = estKembali.getTime() - estBerangkat.getTime()
-    const jumlahHari   = Math.ceil(diffMs / (1000 * 60 * 60 * 24)) + 1
-    const jumlahMalam  = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)))
+    const startD       = new Date(estBerangkat.getFullYear(), estBerangkat.getMonth(), estBerangkat.getDate())
+    const endD         = new Date(estKembali.getFullYear(), estKembali.getMonth(), estKembali.getDate())
+    const diffDays     = Math.floor((endD.getTime() - startD.getTime()) / (1000 * 60 * 60 * 24))
+    const jumlahHari   = diffDays + 1
+    const jumlahMalam  = Math.max(0, diffDays)
 
     const paguList = await kalkulasiPaguBto({
       gradeId,
@@ -227,7 +229,13 @@ export default async function btoRoutes(fastify: FastifyInstance) {
       jumlahMalam,
     })
 
-    return reply.send(ok({ paguList, jumlahHari, jumlahMalam }))
+    const mappedPaguList = paguList.map(p => ({
+      ...p,
+      nilaiLimit: p.nilaiTotal,
+      jumlahHari: p.perMalam ? jumlahMalam : jumlahHari
+    }))
+
+    return reply.send(ok({ paguList: mappedPaguList, jumlahHari, jumlahMalam }))
   })
 
   /** GET /api/bto/:id/pemberi-tugas-options — Dropdown pemberi tugas */

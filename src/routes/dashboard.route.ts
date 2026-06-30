@@ -2,7 +2,7 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../db/connection';
-import { bto, bte, spdk } from '../db/schema';
+import { bto, bte, spdk, meeting } from '../db/schema';
 import { eq, and, gte, lte, desc, sql } from 'drizzle-orm';
 import { ok } from '../utils/response';
 import { AppError } from '../utils/errorHandler';
@@ -39,12 +39,63 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
       .from(bte)
       .where(eq(bte.status, 'PENDING_PAYMENT'));
 
+    const [totalBtoRow] = await db.select({ count: sql<number>`count(*)` }).from(bto);
+    const [draftBtoRow] = await db.select({ count: sql<number>`count(*)` }).from(bto).where(sql`status IN ('DRAFT', 'REVISION_DP')`);
+    const [activeBtoRow] = await db.select({ count: sql<number>`count(*)` }).from(bto).where(sql`status IN ('ACTIVE', 'ATTENDED', 'REPORT_UPLOADED')`);
+    const [completedBtoRow] = await db.select({ count: sql<number>`count(*)` }).from(bto).where(eq(bto.status, 'COMPLETED'));
+
+    const [totalMeetingsRow] = await db.select({ count: sql<number>`count(*)` }).from(meeting);
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    const [meetingsTodayRow] = await db.select({ count: sql<number>`count(*)` }).from(meeting).where(and(
+      lte(meeting.mulai, endOfToday),
+      gte(meeting.selesai, startOfToday)
+    ));
+
     return reply.send(ok({
       currentlyOnTrip: Number(activeTripsRow.count),
       pendingBtoApproval: Number(pendingBtoRow.count),
       pendingBteApproval: Number(pendingBteRow.count),
       pendingBtePayment: Number(pendingPaymentRow.count),
+      totalBto: Number(totalBtoRow.count),
+      draftBto: Number(draftBtoRow.count),
+      activeBto: Number(activeBtoRow.count),
+      completedBto: Number(completedBtoRow.count),
+      totalMeetings: Number(totalMeetingsRow.count),
+      meetingsToday: Number(meetingsTodayRow.count),
     }));
+  });
+
+  /** GET /api/dashboard/karyawan-dinas — List karyawan yang sedang/akan dinas pada range tanggal tertentu */
+  fastify.get('/karyawan-dinas', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const q = req.query as { dateFrom?: string; dateTo?: string };
+    const dateFrom = q.dateFrom ? new Date(q.dateFrom) : new Date();
+    dateFrom.setHours(0,0,0,0);
+    const dateTo = q.dateTo ? new Date(q.dateTo) : new Date();
+    dateTo.setHours(23,59,59,999);
+
+    const rows = await db
+      .select({
+        id: bto.id,
+        nomorBto: bto.nomorBto,
+        employeeNama: bto.employeeNama,
+        tujuanNama: bto.tujuanNama,
+        estBerangkat: bto.estBerangkat,
+        estKembali: bto.estKembali,
+        status: bto.status,
+        wilayahTipe: bto.wilayahTipe,
+      })
+      .from(bto)
+      .where(and(
+        lte(bto.estBerangkat, dateTo),
+        gte(bto.estKembali, dateFrom),
+        sql`status IN ('ACTIVE', 'ATTENDED', 'REPORT_UPLOADED', 'COMPLETED')`
+      ))
+      .orderBy(desc(bto.estBerangkat));
+
+    return reply.send(ok(rows));
   });
 
   /** GET /api/dashboard/proyeksi-biaya — Total biaya perjalanan dinas yang direncanakan */

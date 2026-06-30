@@ -15,8 +15,9 @@ interface PortalUser {
   email:      string
   role:       string
   employee?: {
-    id:       string
+    id:          string
     namaLengkap: string
+    jabatan?:    string
     grade?: { kode: string; level: number }
     unit?:  { id: string; nama: string }
     penempatanArea?: {
@@ -130,7 +131,10 @@ export async function loginSsoService(
       email:      portalUser.email,
       role:       meeTripRole,
       nama:       emp?.namaLengkap ?? null,
+      jabatan:    portalUser.employee?.jabatan ?? null,
       gradeLevel: emp?.grade?.level ?? null,
+      gradeKode:  emp?.grade?.kode  ?? null,
+      unitNama:   emp?.unit?.nama   ?? null,
     },
   }
 }
