@@ -1,8 +1,9 @@
 // ─── Pagu Service ─────────────────────────────────────────────────────────────
 // Kalkulasi pagu berdasarkan rincian + grade + wilayah_tipe + tanggal + jumlah hari
 import { db }   from '../db/connection'
-import { refPagu, refGrade, refRincianBiaya } from '../db/schema'
+import { refPagu, refRincianBiaya } from '../db/schema'
 import { eq, and, or, isNull, lte, gte } from 'drizzle-orm'
+import { config as appConfig } from '../config/env'
 
 export interface PaguResult {
   rincianId:   string
@@ -104,9 +105,18 @@ export async function kalkulasiPaguBto(params: {
 
 // ─── Lookup gradeId dari gradeLevel ──────────────────────────────────────────
 export async function getGradeIdByLevel(gradeLevel: number): Promise<string | null> {
-  const rows = await db.select()
-    .from(refGrade)
-    .where(eq(refGrade.level, gradeLevel))
-    .limit(1)
-  return rows[0]?.id ?? null
+  try {
+    const res = await fetch(`${appConfig.portal.apiUrl}/api/sso/grades`, {
+      headers: { 'x-internal': '1' },
+    })
+    if (res.ok) {
+      const body = await res.json() as { data: any[] }
+      const rows = body.data ?? []
+      const found = rows.find(r => r.level === gradeLevel)
+      return found?.id ?? null
+    }
+  } catch (err) {
+    console.error('Gagal mengambil grade level dari Portal SSO:', err)
+  }
+  return null
 }

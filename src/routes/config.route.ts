@@ -2,10 +2,11 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../db/connection';
-import { configPemberiTugas, configApproverSpdk, meetripUserRole } from '../db/schema';
+import { configPemberiTugas, configApproverSpdk, meetripUserRole, localUserCache } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { ok } from '../utils/response';
 import { AppError } from '../utils/errorHandler';
+import { config } from '../config/env';
 
 const ptConfigSchema = z.object({
   mode: z.enum(['grade_based', 'fixed_person']),
@@ -90,7 +91,43 @@ export default async function configRoutes(fastify: FastifyInstance) {
   /** GET /api/config/users-role — List all custom roles */
   fastify.get('/users-role', { preHandler: [fastify.authenticateAdmin] }, async () => {
     const rows = await db.select().from(meetripUserRole);
-    return ok(rows);
+
+    // Fetch local user caches as fallback
+    const caches = await db.select().from(localUserCache);
+    const cacheMap = new Map(caches.map(c => [c.portalUserId, c]));
+
+    // Fetch employee data from portal to get current names, emails, and positions (jabatans)
+    const portalUrl = `${config.portal.apiUrl}/api/sso/employees?limit=500`;
+    let employees: any[] = [];
+    try {
+      const res = await fetch(portalUrl, {
+        headers: { 'x-internal': '1' },
+      });
+      if (res.ok) {
+        const body = await res.json() as { data: any[] };
+        employees = body.data ?? [];
+      }
+    } catch (err) {
+      fastify.log.warn({ err }, 'Gagal mengambil data employee dari portal di users-role');
+    }
+
+    const employeeMap = new Map(employees.map(e => [e.id, e]));
+
+    const result = rows.map(r => {
+      const emp = employeeMap.get(r.portalUserId);
+      const cache = cacheMap.get(r.portalUserId);
+      return {
+        id: r.id,
+        portalUserId: r.portalUserId,
+        role: r.role,
+        createdAt: r.createdAt,
+        nama: emp?.namaLengkap ?? cache?.nama ?? null,
+        email: emp?.email ?? cache?.email ?? null,
+        jabatan: emp?.jabatan ?? null,
+      };
+    });
+
+    return ok(result);
   });
 
   /** POST /api/config/users-role — Upsert custom user role */

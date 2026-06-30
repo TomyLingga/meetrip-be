@@ -15,11 +15,6 @@ export const meetingStatusEnum = pgEnum('meeting_status', [
   'CANCELLED',
 ])
 
-export const fasilitasTipeEnum = pgEnum('fasilitas_tipe', [
-  'snack',
-  'makan_siang',
-  'makan_malam',
-])
 
 // ─── meeting ──────────────────────────────────────────────────────────────────
 export const meeting = pgTable('meeting', {
@@ -54,12 +49,17 @@ export const meetingPartisipan = pgTable('meeting_partisipan', {
   isExternal: boolean('is_external').notNull().default(false),
 })
 
-// ─── meeting_fasilitas ────────────────────────────────────────────────────────
-// Kebutuhan snack/makan untuk meeting
-export const meetingFasilitas = pgTable('meeting_fasilitas', {
-  id:        uuid('id').primaryKey().$defaultFn(genUUID),
-  meetingId: uuid('meeting_id').notNull().references(() => meeting.id, { onDelete: 'cascade' }),
-  tipe:      fasilitasTipeEnum('tipe').notNull(), // snack|makan_siang|makan_malam
-  qty:       integer('qty').notNull().default(0),
-  catatan:   text('catatan'),
-})
+// ─── Relations ────────────────────────────────────────────────────────────────
+import { relations } from 'drizzle-orm'
+
+export const meetingRelations = relations(meeting, ({ many }) => ({
+  meetingPartisipan: many(meetingPartisipan),
+}))
+
+export const meetingPartisipanRelations = relations(meetingPartisipan, ({ one }) => ({
+  meeting: one(meeting, {
+    fields: [meetingPartisipan.meetingId],
+    references: [meeting.id],
+  }),
+}))
+

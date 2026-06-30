@@ -2,10 +2,11 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../db/connection';
-import { refGrade, refTransport, refRincianBiaya, refPagu, refRuangMeeting, configSistem } from '../db/schema';
+import { refTransport, refRincianBiaya, refPagu, refRuangMeeting, configSistem } from '../db/schema';
 import { eq, desc, asc } from 'drizzle-orm';
 import { ok } from '../utils/response';
 import { AppError } from '../utils/errorHandler';
+import { config } from '../config/env';
 
 // ─── Zod Schemas for validation ──────────────────────────────────────────────
 const gradeSchema = z.object({
@@ -56,31 +57,33 @@ const listQuerySchema = z.object({
 
 export default async function masterRoutes(fastify: FastifyInstance) {
 
-  // ─── ref_grade CRUD ────────────────────────────────────────────────────────
+  // ─── ref_grade CRUD (Dikelola oleh Portal SSO) ──────────────────────────────
   fastify.get('/ref-grade', { preHandler: [fastify.authenticate] }, async () => {
-    const rows = await db.select().from(refGrade).orderBy(desc(refGrade.level));
-    return ok(rows);
+    try {
+      const res = await fetch(`${config.portal.apiUrl}/api/sso/grades`, {
+        headers: { 'x-internal': '1' },
+      });
+      if (res.ok) {
+        const body = await res.json() as { data: any[] };
+        const rows = body.data ?? [];
+        return ok(rows);
+      }
+    } catch (err) {
+      fastify.log.error(err, 'Gagal mengambil grade dari Portal SSO');
+    }
+    return ok([]);
   });
 
-  fastify.post('/ref-grade', { preHandler: [fastify.authenticateAdmin] }, async (req, reply) => {
-    const data = gradeSchema.parse(req.body);
-    const [inserted] = await db.insert(refGrade).values(data).returning();
-    return reply.status(201).send(ok(inserted));
+  fastify.post('/ref-grade', { preHandler: [fastify.authenticateAdmin] }, async () => {
+    throw new AppError('Master Data Grade dikelola secara terpusat oleh Portal SSO', 403);
   });
 
-  fastify.put('/ref-grade/:id', { preHandler: [fastify.authenticateAdmin] }, async (req) => {
-    const { id } = req.params as { id: string };
-    const data = gradeSchema.parse(req.body);
-    const [updated] = await db.update(refGrade).set(data).where(eq(refGrade.id, id)).returning();
-    if (!updated) throw new AppError('Data tidak ditemukan', 404);
-    return ok(updated);
+  fastify.put('/ref-grade/:id', { preHandler: [fastify.authenticateAdmin] }, async () => {
+    throw new AppError('Master Data Grade dikelola secara terpusat oleh Portal SSO', 403);
   });
 
-  fastify.delete('/ref-grade/:id', { preHandler: [fastify.authenticateAdmin] }, async (req) => {
-    const { id } = req.params as { id: string };
-    const [deleted] = await db.delete(refGrade).where(eq(refGrade.id, id)).returning();
-    if (!deleted) throw new AppError('Data tidak ditemukan', 404);
-    return ok(deleted);
+  fastify.delete('/ref-grade/:id', { preHandler: [fastify.authenticateAdmin] }, async () => {
+    throw new AppError('Master Data Grade dikelola secara terpusat oleh Portal SSO', 403);
   });
 
   // ─── ref_transport CRUD ────────────────────────────────────────────────────

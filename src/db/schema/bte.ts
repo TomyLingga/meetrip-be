@@ -84,3 +84,33 @@ export const bteApprovalLog = pgTable('bte_approval_log', {
   catatan:   text('catatan'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 })
+
+// ─── Relations ────────────────────────────────────────────────────────────────
+import { relations } from 'drizzle-orm'
+
+export const bteRelations = relations(bte, ({ many }) => ({
+  bteRincian: many(bteRincian),
+  bteBiayaLain: many(bteBiayaLain),
+  bteApprovalLog: many(bteApprovalLog),
+}))
+
+export const bteRincianRelations = relations(bteRincian, ({ one }) => ({
+  bte: one(bte, {
+    fields: [bteRincian.bteId],
+    references: [bte.id],
+  }),
+}))
+
+export const bteBiayaLainRelations = relations(bteBiayaLain, ({ one }) => ({
+  bte: one(bte, {
+    fields: [bteBiayaLain.bteId],
+    references: [bte.id],
+  }),
+}))
+
+export const bteApprovalLogRelations = relations(bteApprovalLog, ({ one }) => ({
+  bte: one(bte, {
+    fields: [bteApprovalLog.bteId],
+    references: [bte.id],
+  }),
+}))

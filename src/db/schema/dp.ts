@@ -57,3 +57,17 @@ export const dpApprovalLog = pgTable('dp_approval_log', {
   catatan:   text('catatan'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 })
+
+// ─── Relations ────────────────────────────────────────────────────────────────
+import { relations } from 'drizzle-orm'
+
+export const dpRelations = relations(dp, ({ many }) => ({
+  dpRincian: many(dpRincian),
+}))
+
+export const dpRincianRelations = relations(dpRincian, ({ one }) => ({
+  dp: one(dp, {
+    fields: [dpRincian.dpId],
+    references: [dp.id],
+  }),
+}))

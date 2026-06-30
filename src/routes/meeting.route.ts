@@ -12,6 +12,7 @@ import { meeting } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { ok } from '../utils/response';
 import { AppError } from '../utils/errorHandler';
+import { config } from '../config/env';
 
 const meetingCreateSchema = z.object({
   topik: z.string().min(1),
@@ -31,13 +32,6 @@ const meetingCreateSchema = z.object({
       isExternal: z.boolean().default(false),
     })
   ),
-  fasilitas: z.array(
-    z.object({
-      tipe: z.enum(['snack', 'makan_siang', 'makan_malam']),
-      qty: z.number().int().min(1),
-      catatan: z.string().optional(),
-    })
-  ).optional(),
 });
 
 export default async function meetingRoutes(fastify: FastifyInstance) {
@@ -59,7 +53,67 @@ export default async function meetingRoutes(fastify: FastifyInstance) {
       dateTo: q.dateTo ? new Date(q.dateTo) : undefined,
       ruangId: q.ruangId,
     });
-    return reply.send(ok(result));
+
+    const portalUrl = `${config.portal.apiUrl}/api/sso/employees?limit=500`;
+    let employees: any[] = [];
+    try {
+      const res = await fetch(portalUrl, {
+        headers: { 'x-internal': '1' },
+      });
+      if (res.ok) {
+        const body = await res.json() as { data: any[] };
+        employees = body.data ?? [];
+      }
+    } catch (err) {
+      fastify.log.warn({ err }, 'Gagal mengambil data employee dari portal untuk list meeting');
+    }
+
+    const employeeMap = new Map(employees.map(e => [e.id, e]));
+    const mapped = result.map((m: any) => {
+      const emp = employeeMap.get(m.createdBy);
+      return {
+        ...m,
+        createdByNama: emp?.namaLengkap ?? m.createdByNama,
+        createdByJabatan: emp?.jabatan ?? null,
+      };
+    });
+
+    return reply.send(ok(mapped));
+  });
+
+  fastify.get('/public', async (req, reply) => {
+    const q = req.query as any;
+    const result = await listMeetingService({
+      dateFrom: q.dateFrom ? new Date(q.dateFrom) : undefined,
+      dateTo: q.dateTo ? new Date(q.dateTo) : undefined,
+      ruangId: q.ruangId,
+    });
+
+    const portalUrl = `${config.portal.apiUrl}/api/sso/employees?limit=500`;
+    let employees: any[] = [];
+    try {
+      const res = await fetch(portalUrl, {
+        headers: { 'x-internal': '1' },
+      });
+      if (res.ok) {
+        const body = await res.json() as { data: any[] };
+        employees = body.data ?? [];
+      }
+    } catch (err) {
+      fastify.log.warn({ err }, 'Gagal mengambil data employee dari portal untuk list meeting public');
+    }
+
+    const employeeMap = new Map(employees.map(e => [e.id, e]));
+    const mapped = result.map((m: any) => {
+      const emp = employeeMap.get(m.createdBy);
+      return {
+        ...m,
+        createdByNama: emp?.namaLengkap ?? m.createdByNama,
+        createdByJabatan: emp?.jabatan ?? null,
+      };
+    });
+
+    return reply.send(ok(mapped));
   });
 
   fastify.get('/check-ruang', { preHandler: [fastify.authenticate] }, async (req, reply) => {
@@ -82,7 +136,6 @@ export default async function meetingRoutes(fastify: FastifyInstance) {
       where: eq(meeting.id, id),
       with: {
         meetingPartisipan: true,
-        meetingFasilitas: true,
       },
     });
     if (!mt) throw new AppError('Meeting tidak ditemukan', 404);

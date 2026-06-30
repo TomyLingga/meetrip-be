@@ -7,15 +7,6 @@ import {
 
 const genUUID = () => crypto.randomUUID()
 
-// ─── ref_grade ────────────────────────────────────────────────────────────────
-// Grade / golongan jabatan. Di-sync dari portal atau di-input manual.
-export const refGrade = pgTable('ref_grade', {
-  id:         uuid('id').primaryKey().$defaultFn(genUUID),
-  kode:       varchar('kode',       { length: 20  }).notNull().unique(),
-  label:      varchar('label',      { length: 100 }).notNull(),
-  level:      integer('level').notNull().default(0),
-  keterangan: text('keterangan'),
-})
 
 // ─── ref_transport ────────────────────────────────────────────────────────────
 // Moda transportasi: perusahaan | publik | pesawat
@@ -45,7 +36,7 @@ export const refRincianBiaya = pgTable('ref_rincian_biaya', {
 export const refPagu = pgTable('ref_pagu', {
   id:           uuid('id').primaryKey().$defaultFn(genUUID),
   rincianId:    uuid('rincian_id').notNull().references(() => refRincianBiaya.id),
-  gradeId:      uuid('grade_id').notNull().references(() => refGrade.id),
+  gradeId:      uuid('grade_id').notNull(),
   wilayahTipe:  varchar('wilayah_tipe', { length: 30 }).notNull(), // 'dalam_wilayah'|'luar_wilayah'|'luar_negeri'
   nilai:        numeric('nilai', { precision: 15, scale: 2 }).notNull().default('0'),
   useDollar:    boolean('use_dollar').notNull().default(false),

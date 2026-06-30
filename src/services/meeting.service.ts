@@ -1,7 +1,7 @@
 // ─── Meeting Service ──────────────────────────────────────────────────────────
 import { db }         from '../db/connection'
-import { meeting, meetingPartisipan, meetingFasilitas } from '../db/schema'
-import { eq, and, not, gte, lte, sql } from 'drizzle-orm'
+import { meeting, meetingPartisipan } from '../db/schema'
+import { eq, and, not, gte, lte, sql, gt, lt } from 'drizzle-orm'
 import { AppError }   from '../utils/errorHandler'
 
 // ─── Conflict check ruang meeting ────────────────────────────────────────────
@@ -15,9 +15,9 @@ export async function checkRuangConflict(
   const conditions: any[] = [
     eq(meeting.ruangId, ruangId),
     not(eq(meeting.status, 'CANCELLED')),
-    // Overlap: NOT (selesai <= mulai_baru OR mulai >= selesai_baru)
-    sql`${meeting.selesai} > ${mulai}`,
-    sql`${meeting.mulai} < ${selesai}`,
+    // Overlap: selesai > mulai_baru AND mulai < selesai_baru
+    gt(meeting.selesai, mulai),
+    lt(meeting.mulai, selesai),
   ]
   if (excludeMeetingId) {
     conditions.push(not(eq(meeting.id, excludeMeetingId)))
@@ -42,8 +42,12 @@ export async function createMeetingService(createdBy: string, createdByNama: str
   zoomLink?:       string
   catatan?:        string
   partisipan: Array<{ nama: string; email?: string; jabatan?: string; isExternal?: boolean }>
-  fasilitas?: Array<{ tipe: 'snack' | 'makan_siang' | 'makan_malam'; qty: number; catatan?: string }>
 }) {
+  // Cek tanggal tidak boleh di masa lalu
+  if (new Date(data.mulai) < new Date()) {
+    throw new AppError('Waktu mulai meeting tidak boleh di masa lalu', 400)
+  }
+
   // Cek konflik ruang
   if (data.ruangId) {
     const conflict = await checkRuangConflict(data.ruangId, data.mulai, data.selesai)
@@ -78,17 +82,7 @@ export async function createMeetingService(createdBy: string, createdByNama: str
     )
   }
 
-  // Insert fasilitas
-  if (data.fasilitas && data.fasilitas.length > 0) {
-    await db.insert(meetingFasilitas).values(
-      data.fasilitas.map(f => ({
-        meetingId: mt.id,
-        tipe:      f.tipe,
-        qty:       f.qty,
-        catatan:   f.catatan,
-      }))
-    )
-  }
+
 
   return mt
 }
@@ -102,12 +96,12 @@ export async function updateMeetingService(
     ruangNama: string; needSoundSystem: boolean; needZoom: boolean
     zoomLink: string; catatan: string
     partisipan: Array<{ nama: string; email?: string; jabatan?: string; isExternal?: boolean }>
-    fasilitas: Array<{ tipe: 'snack' | 'makan_siang' | 'makan_malam'; qty: number; catatan?: string }>
   }>,
   isAdmin = false,
 ) {
   const [mt] = await db.select().from(meeting).where(eq(meeting.id, id)).limit(1)
   if (!mt) throw new AppError('Meeting tidak ditemukan', 404)
+  if (new Date(mt.selesai) < new Date()) throw new AppError('Meeting yang sudah selesai tidak dapat diubah', 400)
   if (!isAdmin && mt.createdBy !== userId) throw new AppError('Bukan meeting Anda', 403)
   if (mt.status === 'CANCELLED') throw new AppError('Meeting sudah dibatalkan', 400)
 
@@ -132,12 +126,7 @@ export async function updateMeetingService(
       await db.insert(meetingPartisipan).values(data.partisipan.map(p => ({ meetingId: id, ...p, isExternal: p.isExternal ?? false })))
     }
   }
-  if (data.fasilitas) {
-    await db.delete(meetingFasilitas).where(eq(meetingFasilitas.meetingId, id))
-    if (data.fasilitas.length > 0) {
-      await db.insert(meetingFasilitas).values(data.fasilitas.map(f => ({ meetingId: id, ...f })))
-    }
-  }
+
 
   return updated
 }
@@ -146,6 +135,7 @@ export async function updateMeetingService(
 export async function cancelMeetingService(id: string, userId: string, cancelReason: string, isAdmin = false) {
   const [mt] = await db.select().from(meeting).where(eq(meeting.id, id)).limit(1)
   if (!mt) throw new AppError('Meeting tidak ditemukan', 404)
+  if (new Date(mt.selesai) < new Date()) throw new AppError('Meeting yang sudah selesai tidak dapat dibatalkan', 400)
   if (!isAdmin && mt.createdBy !== userId) throw new AppError('Bukan meeting Anda', 403)
   if (mt.status === 'CANCELLED') throw new AppError('Sudah dibatalkan', 400)
 
