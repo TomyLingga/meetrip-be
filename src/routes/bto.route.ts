@@ -94,8 +94,13 @@ export default async function btoRoutes(fastify: FastifyInstance) {
     const updateData: Partial<typeof bto.$inferInsert> = {
       ...data,
 <<<<<<< HEAD
+<<<<<<< HEAD
       tujuanLat: data.tujuanLat !== undefined ? String(data.tujuanLat) : undefined,
       tujuanLng: data.tujuanLng !== undefined ? String(data.tujuanLng) : undefined,
+=======
+      tujuanLat:    data.tujuanLat != null ? String(data.tujuanLat) : undefined,
+      tujuanLng:    data.tujuanLng != null ? String(data.tujuanLng) : undefined,
+>>>>>>> 5d5d434c55b7461215871bb68626e73dea59eb98
 =======
       tujuanLat:    data.tujuanLat != null ? String(data.tujuanLat) : undefined,
       tujuanLng:    data.tujuanLng != null ? String(data.tujuanLng) : undefined,
@@ -246,7 +251,11 @@ export default async function btoRoutes(fastify: FastifyInstance) {
         headers: { 'x-internal': '1' },
       })
 <<<<<<< HEAD
+<<<<<<< HEAD
       const data = await portalRes.json().catch(() => ({ data: [] })) as PortalListResponse<PortalEmployeeOption>
+=======
+      const data = await portalRes.json().catch(() => ({ data: [] })) as { data: any[] }
+>>>>>>> 5d5d434c55b7461215871bb68626e73dea59eb98
 =======
       const data = await portalRes.json().catch(() => ({ data: [] })) as { data: any[] }
 >>>>>>> 5d5d434c55b7461215871bb68626e73dea59eb98
@@ -268,7 +277,11 @@ export default async function btoRoutes(fastify: FastifyInstance) {
       headers: { 'x-internal': '1' },
     })
 <<<<<<< HEAD
+<<<<<<< HEAD
     const data = await portalRes.json().catch(() => ({ data: [] })) as PortalListResponse<PortalEmployeeOption>
+=======
+    const data = await portalRes.json().catch(() => ({ data: [] })) as { data: any[] }
+>>>>>>> 5d5d434c55b7461215871bb68626e73dea59eb98
 =======
     const data = await portalRes.json().catch(() => ({ data: [] })) as { data: any[] }
 >>>>>>> 5d5d434c55b7461215871bb68626e73dea59eb98

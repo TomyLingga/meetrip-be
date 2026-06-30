@@ -13,6 +13,7 @@ export async function checkRuangConflict(
   excludeMeetingId?: string,
 ): Promise<boolean> {
 <<<<<<< HEAD
+<<<<<<< HEAD
   const conditions: SQL[] = [
     eq(meeting.ruangId, ruangId),
     not(eq(meeting.status, 'CANCELLED')),
@@ -20,6 +21,8 @@ export async function checkRuangConflict(
     sql`${meeting.selesai} > ${mulai}`,
     sql`${meeting.mulai} < ${selesai}`,
 =======
+=======
+>>>>>>> 5d5d434c55b7461215871bb68626e73dea59eb98
   const conditions: any[] = [
     eq(meeting.ruangId, ruangId),
     not(eq(meeting.status, 'CANCELLED')),
@@ -28,6 +31,9 @@ export async function checkRuangConflict(
       lte(meeting.selesai, mulai),
       gte(meeting.mulai,   selesai),
     )!),
+<<<<<<< HEAD
+>>>>>>> 5d5d434c55b7461215871bb68626e73dea59eb98
+=======
 >>>>>>> 5d5d434c55b7461215871bb68626e73dea59eb98
   ]
   if (excludeMeetingId) {

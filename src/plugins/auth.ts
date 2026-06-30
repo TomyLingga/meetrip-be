@@ -26,6 +26,7 @@ declare module 'fastify' {
     authenticate:      (req: FastifyRequest, reply: FastifyReply) => Promise<void>
     authenticateAdmin: (req: FastifyRequest, reply: FastifyReply) => Promise<void>
 <<<<<<< HEAD
+<<<<<<< HEAD
     authenticateSdm: (req: FastifyRequest, reply: FastifyReply) => Promise<void>
   }
 }
@@ -34,6 +35,9 @@ declare module '@fastify/jwt' {
   interface FastifyJWT {
     payload: JwtPayload
     user: JwtPayload
+=======
+    authenticateSdm:   (req: FastifyRequest, reply: FastifyReply) => Promise<void>
+>>>>>>> 5d5d434c55b7461215871bb68626e73dea59eb98
 =======
     authenticateSdm:   (req: FastifyRequest, reply: FastifyReply) => Promise<void>
 >>>>>>> 5d5d434c55b7461215871bb68626e73dea59eb98

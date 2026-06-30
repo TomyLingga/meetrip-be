@@ -8,7 +8,10 @@ import { AppError } from '../utils/errorHandler'
 import crypto      from 'crypto'
 import type { FastifyInstance } from 'fastify'
 <<<<<<< HEAD
+<<<<<<< HEAD
 import type { JwtPayload } from '../plugins/auth'
+=======
+>>>>>>> 5d5d434c55b7461215871bb68626e73dea59eb98
 =======
 >>>>>>> 5d5d434c55b7461215871bb68626e73dea59eb98
 
@@ -63,7 +66,12 @@ export async function loginSsoService(
   }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   const { data: portalUser } = await portalRes.json() as PortalVerifyResponse
+=======
+  const resBody = await portalRes.json() as { data: PortalUser }
+  const portalUser = resBody.data
+>>>>>>> 5d5d434c55b7461215871bb68626e73dea59eb98
 =======
   const resBody = await portalRes.json() as { data: PortalUser }
   const portalUser = resBody.data
