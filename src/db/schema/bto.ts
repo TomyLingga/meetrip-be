@@ -65,6 +65,8 @@ export const bto = pgTable('bto', {
   // Lampiran (memo, WA, disposisi, dll)
   lampiranPath:      varchar('lampiran_path', { length: 500 }),
   lampiranNama:      varchar('lampiran_nama', { length: 300 }),
+  laporanPath:       varchar('laporan_path', { length: 500 }),
+  laporanNama:       varchar('laporan_nama', { length: 300 }),
   // Status & nomor
   status:            btoStatusEnum('status').notNull().default('DRAFT'),
   catatanAdmin:      text('catatan_admin'),

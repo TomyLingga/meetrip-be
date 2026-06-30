@@ -6,6 +6,8 @@ import { eq }      from 'drizzle-orm'
 import { config }  from '../config/env'
 import { AppError } from '../utils/errorHandler'
 import crypto      from 'crypto'
+import type { FastifyInstance } from 'fastify'
+import type { JwtPayload } from '../plugins/auth'
 
 // ─── Tipe data user dari portal (response /api/sso/verify) ───────────────────
 interface PortalUser {
@@ -24,6 +26,10 @@ interface PortalUser {
       longitude: string
     }
   }
+}
+
+interface PortalVerifyResponse {
+  data: PortalUser
 }
 
 // Helper: Tentukan role spesifik MeeTrip
@@ -45,7 +51,7 @@ async function getMeeTripRole(portalUserId: string, portalRole: string): Promise
 export async function loginSsoService(
   ssoToken: string,
   appId: string,
-  fastify: { jwt: { sign: (payload: object, opts?: object) => string } },
+  fastify: FastifyInstance,
 ) {
   // 1. Verifikasi token ke portal
   const portalRes = await fetch(`${config.portal.apiUrl}/api/sso/verify`, {
@@ -59,7 +65,7 @@ export async function loginSsoService(
     throw new AppError((body as any).error ?? 'SSO token tidak valid', 401)
   }
 
-  const { data: portalUser }: { data: PortalUser } = await portalRes.json()
+  const { data: portalUser } = await portalRes.json() as PortalVerifyResponse
 
   // Ambil MeeTrip role
   const meeTripRole = await getMeeTripRole(portalUser.id, portalUser.role)
@@ -101,7 +107,7 @@ export async function loginSsoService(
   }
 
   // 3. Buat JWT MeeTrip
-  const payload = {
+  const payload: JwtPayload = {
     sub:        portalUser.id,
     email:      portalUser.email,
     employeeId: emp?.id          ?? null,
@@ -137,7 +143,7 @@ export async function loginSsoService(
 // ─── Refresh Token ────────────────────────────────────────────────────────────
 export async function refreshSsoTokenService(
   token: string,
-  fastify: { jwt: { sign: (payload: object, opts?: object) => string } },
+  fastify: FastifyInstance,
 ) {
   const [rt] = await db.select()
     .from(refreshToken)
@@ -156,7 +162,7 @@ export async function refreshSsoTokenService(
   // Ambil MeeTrip role ter-update
   const meeTripRole = await getMeeTripRole(userCache.portalUserId, userCache.role ?? 'user')
 
-  const payload = {
+  const payload: JwtPayload = {
     sub:        userCache.portalUserId,
     email:      userCache.email,
     employeeId: userCache.employeeId,

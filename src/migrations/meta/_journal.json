@@ -15,6 +15,13 @@
       "when": 1782717713362,
       "tag": "0001_new_crusher_hogan",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1782781200000,
+      "tag": "0002_add_bto_report_upload",
+      "breakpoints": true
     }
   ]
 }

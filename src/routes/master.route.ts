@@ -3,7 +3,7 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../db/connection';
 import { refGrade, refTransport, refRincianBiaya, refPagu, refRuangMeeting, configSistem } from '../db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, asc } from 'drizzle-orm';
 import { ok } from '../utils/response';
 import { AppError } from '../utils/errorHandler';
 
@@ -50,6 +50,10 @@ const ruangMeetingSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
+const listQuerySchema = z.object({
+  includeInactive: z.enum(['1', 'true']).optional(),
+});
+
 export default async function masterRoutes(fastify: FastifyInstance) {
 
   // ─── ref_grade CRUD ────────────────────────────────────────────────────────
@@ -80,8 +84,11 @@ export default async function masterRoutes(fastify: FastifyInstance) {
   });
 
   // ─── ref_transport CRUD ────────────────────────────────────────────────────
-  fastify.get('/ref-transport', { preHandler: [fastify.authenticate] }, async () => {
-    const rows = await db.select().from(refTransport);
+  fastify.get('/ref-transport', { preHandler: [fastify.authenticate] }, async (req) => {
+    const query = listQuerySchema.parse(req.query);
+    const rows = query.includeInactive
+      ? await db.select().from(refTransport).orderBy(asc(refTransport.label))
+      : await db.select().from(refTransport).where(eq(refTransport.isActive, true)).orderBy(asc(refTransport.label));
     return ok(rows);
   });
 
@@ -95,6 +102,13 @@ export default async function masterRoutes(fastify: FastifyInstance) {
     const { id } = req.params as { id: string };
     const data = transportSchema.parse(req.body);
     const [updated] = await db.update(refTransport).set(data).where(eq(refTransport.id, id)).returning();
+    if (!updated) throw new AppError('Data tidak ditemukan', 404);
+    return ok(updated);
+  });
+
+  fastify.delete('/ref-transport/:id', { preHandler: [fastify.authenticateAdmin] }, async (req) => {
+    const { id } = req.params as { id: string };
+    const [updated] = await db.update(refTransport).set({ isActive: false }).where(eq(refTransport.id, id)).returning();
     if (!updated) throw new AppError('Data tidak ditemukan', 404);
     return ok(updated);
   });
@@ -153,8 +167,11 @@ export default async function masterRoutes(fastify: FastifyInstance) {
   });
 
   // ─── ref_ruang_meeting CRUD ───────────────────────────────────────────────
-  fastify.get('/ref-ruang-meeting', { preHandler: [fastify.authenticate] }, async () => {
-    const rows = await db.select().from(refRuangMeeting);
+  fastify.get('/ref-ruang-meeting', { preHandler: [fastify.authenticate] }, async (req) => {
+    const query = listQuerySchema.parse(req.query);
+    const rows = query.includeInactive
+      ? await db.select().from(refRuangMeeting).orderBy(asc(refRuangMeeting.nama))
+      : await db.select().from(refRuangMeeting).where(eq(refRuangMeeting.isActive, true)).orderBy(asc(refRuangMeeting.nama));
     return ok(rows);
   });
 
@@ -168,6 +185,13 @@ export default async function masterRoutes(fastify: FastifyInstance) {
     const { id } = req.params as { id: string };
     const data = ruangMeetingSchema.parse(req.body);
     const [updated] = await db.update(refRuangMeeting).set(data).where(eq(refRuangMeeting.id, id)).returning();
+    if (!updated) throw new AppError('Data tidak ditemukan', 404);
+    return ok(updated);
+  });
+
+  fastify.delete('/ref-ruang-meeting/:id', { preHandler: [fastify.authenticateAdmin] }, async (req) => {
+    const { id } = req.params as { id: string };
+    const [updated] = await db.update(refRuangMeeting).set({ isActive: false }).where(eq(refRuangMeeting.id, id)).returning();
     if (!updated) throw new AppError('Data tidak ditemukan', 404);
     return ok(updated);
   });

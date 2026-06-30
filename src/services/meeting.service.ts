@@ -1,7 +1,7 @@
 // ─── Meeting Service ──────────────────────────────────────────────────────────
 import { db }         from '../db/connection'
 import { meeting, meetingPartisipan, meetingFasilitas } from '../db/schema'
-import { eq, and, or, lt, gt, not, desc, gte, lte, sql } from 'drizzle-orm'
+import { eq, and, not, gte, lte, sql, SQL } from 'drizzle-orm'
 import { AppError }   from '../utils/errorHandler'
 
 // ─── Conflict check ruang meeting ────────────────────────────────────────────
@@ -12,14 +12,12 @@ export async function checkRuangConflict(
   selesai: Date,
   excludeMeetingId?: string,
 ): Promise<boolean> {
-  const conditions = [
+  const conditions: SQL[] = [
     eq(meeting.ruangId, ruangId),
     not(eq(meeting.status, 'CANCELLED')),
-    // Overlap: NOT (selesai <= mulai_baru OR mulai >= selesai_baru)
-    not(or(
-      lte(meeting.selesai, mulai),
-      gte(meeting.mulai,   selesai),
-    )),
+    // Overlap: existing.selesai > new.mulai AND existing.mulai < new.selesai
+    sql`${meeting.selesai} > ${mulai}`,
+    sql`${meeting.mulai} < ${selesai}`,
   ]
   if (excludeMeetingId) {
     conditions.push(not(eq(meeting.id, excludeMeetingId)))

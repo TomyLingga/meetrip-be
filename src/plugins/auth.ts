@@ -19,7 +19,11 @@ declare module 'fastify' {
     authenticateAdmin: (req: FastifyRequest, reply: FastifyReply) => Promise<void>
     authenticateSdm: (req: FastifyRequest, reply: FastifyReply) => Promise<void>
   }
-  interface FastifyRequest {
+}
+
+declare module '@fastify/jwt' {
+  interface FastifyJWT {
+    payload: JwtPayload
     user: JwtPayload
   }
 }

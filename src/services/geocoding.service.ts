@@ -9,6 +9,14 @@ interface GeoResult {
   negara:   string | null
 }
 
+interface GoogleGeocodeResponse {
+  status: string
+  results?: Array<{
+    formatted_address?: string
+    address_components: Array<{ long_name: string; types: string[] }>
+  }>
+}
+
 // ─── Reverse geocode via Google Maps API ─────────────────────────────────────
 export async function reverseGeocode(lat: number, lng: number): Promise<GeoResult> {
   if (!config.googleMaps.apiKey) {
@@ -17,14 +25,14 @@ export async function reverseGeocode(lat: number, lng: number): Promise<GeoResul
 
   const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${config.googleMaps.apiKey}&language=id`
   const res  = await fetch(url)
-  const json = await res.json()
+  const json = await res.json() as GoogleGeocodeResponse
 
   if (json.status !== 'OK' || !json.results?.length) {
     return { alamat: `${lat},${lng}`, provinsi: null, negara: null }
   }
 
   const result     = json.results[0]
-  const components = result.address_components as Array<{ long_name: string; types: string[] }>
+  const components = result.address_components
 
   const provinsi = components.find(c => c.types.includes('administrative_area_level_1'))?.long_name ?? null
   const negara   = components.find(c => c.types.includes('country'))?.long_name ?? null
