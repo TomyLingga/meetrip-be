@@ -21,6 +21,7 @@ import spdkRoutes from './routes/spdk.route';
 import bteRoutes from './routes/bte.route';
 import meetingRoutes from './routes/meeting.route';
 import dashboardRoutes from './routes/dashboard.route';
+import portalUserRoutes from './routes/portal-users.route';
 
 // ─── Upload Folder Setup ──────────────────────────────────────────────────────
 const uploadDir = path.resolve(config.upload.dir);
@@ -67,6 +68,7 @@ async function bootstrap() {
   await fastify.register(bteRoutes, { prefix: '/api/bte' });
   await fastify.register(meetingRoutes, { prefix: '/api/meeting' });
   await fastify.register(dashboardRoutes, { prefix: '/api/dashboard' });
+  await fastify.register(portalUserRoutes, { prefix: '/api/portal/users' });
 
   // ─── Health check ───────────────────────────────────────────────────────────
   fastify.get('/health', async () => ({

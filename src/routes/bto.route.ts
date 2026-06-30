@@ -93,8 +93,13 @@ export default async function btoRoutes(fastify: FastifyInstance) {
     const data = btoCreateSchema.partial().parse(req.body)
     const updateData: Partial<typeof bto.$inferInsert> = {
       ...data,
+<<<<<<< HEAD
       tujuanLat: data.tujuanLat !== undefined ? String(data.tujuanLat) : undefined,
       tujuanLng: data.tujuanLng !== undefined ? String(data.tujuanLng) : undefined,
+=======
+      tujuanLat:    data.tujuanLat != null ? String(data.tujuanLat) : undefined,
+      tujuanLng:    data.tujuanLng != null ? String(data.tujuanLng) : undefined,
+>>>>>>> 5d5d434c55b7461215871bb68626e73dea59eb98
       estBerangkat: data.estBerangkat ? new Date(data.estBerangkat) : undefined,
       estKembali: data.estKembali ? new Date(data.estKembali) : undefined,
     }
@@ -240,7 +245,11 @@ export default async function btoRoutes(fastify: FastifyInstance) {
       const portalRes = await fetch(`${config.portal.apiUrl}/api/sso/employees?id=${cfg.fixedEmployeeId}`, {
         headers: { 'x-internal': '1' },
       })
+<<<<<<< HEAD
       const data = await portalRes.json().catch(() => ({ data: [] })) as PortalListResponse<PortalEmployeeOption>
+=======
+      const data = await portalRes.json().catch(() => ({ data: [] })) as { data: any[] }
+>>>>>>> 5d5d434c55b7461215871bb68626e73dea59eb98
       return reply.send(ok({ mode: 'fixed_person', options: data.data ?? [] }))
     }
 
@@ -258,7 +267,11 @@ export default async function btoRoutes(fastify: FastifyInstance) {
     const portalRes = await fetch(`${config.portal.apiUrl}/api/sso/employees?aboveGradeLevel=${gradeLevel}`, {
       headers: { 'x-internal': '1' },
     })
+<<<<<<< HEAD
     const data = await portalRes.json().catch(() => ({ data: [] })) as PortalListResponse<PortalEmployeeOption>
+=======
+    const data = await portalRes.json().catch(() => ({ data: [] })) as { data: any[] }
+>>>>>>> 5d5d434c55b7461215871bb68626e73dea59eb98
     return reply.send(ok({ mode: 'grade_based', options: data.data ?? [] }))
   })
 }

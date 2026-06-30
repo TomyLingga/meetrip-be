@@ -12,12 +12,23 @@ export async function checkRuangConflict(
   selesai: Date,
   excludeMeetingId?: string,
 ): Promise<boolean> {
+<<<<<<< HEAD
   const conditions: SQL[] = [
     eq(meeting.ruangId, ruangId),
     not(eq(meeting.status, 'CANCELLED')),
     // Overlap: existing.selesai > new.mulai AND existing.mulai < new.selesai
     sql`${meeting.selesai} > ${mulai}`,
     sql`${meeting.mulai} < ${selesai}`,
+=======
+  const conditions: any[] = [
+    eq(meeting.ruangId, ruangId),
+    not(eq(meeting.status, 'CANCELLED')),
+    // Overlap: NOT (selesai <= mulai_baru OR mulai >= selesai_baru)
+    not(or(
+      lte(meeting.selesai, mulai),
+      gte(meeting.mulai,   selesai),
+    )!),
+>>>>>>> 5d5d434c55b7461215871bb68626e73dea59eb98
   ]
   if (excludeMeetingId) {
     conditions.push(not(eq(meeting.id, excludeMeetingId)))
@@ -159,10 +170,10 @@ export async function cancelMeetingService(id: string, userId: string, cancelRea
 
 // ─── List Meeting (range tanggal) ────────────────────────────────────────────
 export async function listMeetingService(filters: { dateFrom?: Date; dateTo?: Date; ruangId?: string }) {
-  const conditions = []
+  const conditions: ReturnType<typeof gte>[] = []
   if (filters.dateFrom) conditions.push(gte(meeting.mulai, filters.dateFrom))
   if (filters.dateTo)   conditions.push(lte(meeting.mulai, filters.dateTo))
-  if (filters.ruangId)  conditions.push(eq(meeting.ruangId, filters.ruangId))
+  if (filters.ruangId)  conditions.push(eq(meeting.ruangId, filters.ruangId) as any)
 
   return db.select().from(meeting)
     .where(conditions.length ? and(...conditions) : undefined)
