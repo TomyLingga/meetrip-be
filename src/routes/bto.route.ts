@@ -267,6 +267,7 @@ export default async function btoRoutes(fastify: FastifyInstance) {
       headers: { 'x-internal': '1' },
     })
     const data = await portalRes.json().catch(() => ({ data: [] })) as { data: any[] }
-    return reply.send(ok({ mode: 'grade_based', options: data.data ?? [] }))
+    const options = (data.data ?? []).filter((emp: any) => emp.id !== req.user.sub && emp.employeeId !== req.user.employeeId);
+    return reply.send(ok({ mode: 'grade_based', options }))
   })
 }

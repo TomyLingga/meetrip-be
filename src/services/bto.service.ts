@@ -70,8 +70,20 @@ export async function submitBtoService(id: string, actor: { id: string; nama: st
   const userCache = await db.query.localUserCache.findFirst({
     where: eq(localUserCache.portalUserId, actor.id),
   })
+  
+  let userProvinsi = userCache?.penempatanProvinsi ?? null
+  if (!userProvinsi && userCache?.penempatanLat && userCache?.penempatanLng) {
+    try {
+      const userGeo = await reverseGeocode(Number(userCache.penempatanLat), Number(userCache.penempatanLng))
+      userProvinsi = userGeo.provinsi
+      await db.update(localUserCache).set({ penempatanProvinsi: userGeo.provinsi }).where(eq(localUserCache.id, userCache.id))
+    } catch (err) {
+      console.error('Failed to reverse geocode user penempatan area:', err)
+    }
+  }
+
   const wilayah = getWilayahTipe(
-    userCache?.penempatanProvinsi ?? null,
+    userProvinsi,
     geo.provinsi,
     geo.negara,
   )
