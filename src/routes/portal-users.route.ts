@@ -42,7 +42,7 @@ export default async function portalUserRoutes(fastify: FastifyInstance) {
 
     try {
       const res = await fetch(portalUrl, {
-        headers: { 'x-internal': '1' },
+        headers: { 'x-internal': config.portal.internalToken },
       })
       if (res.ok) {
         const body = await res.json() as { data: PortalEmployee[] }

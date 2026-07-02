@@ -1,5 +1,6 @@
 // ─── Env Config ────────────────────────────────────────────────────────────────
 import 'dotenv/config'
+// Trigger restart for env reload
 import { z } from 'zod'
 
 const envSchema = z.object({
@@ -18,6 +19,7 @@ const envSchema = z.object({
   REFRESH_TOKEN_EXPIRES_IN: z.string().default('30d'),
 
   PORTAL_API_URL:  z.string().url(),
+  SSO_INTERNAL_TOKEN: z.string().default('secret_development_token'),
   GOOGLE_MAPS_API_KEY: z.string().default(''),
 
   ATTEND_RADIUS_METER: z.coerce.number().default(500),
@@ -54,7 +56,8 @@ export const config = {
     refreshExpiresIn: d.REFRESH_TOKEN_EXPIRES_IN,
   },
   portal: {
-    apiUrl: d.PORTAL_API_URL,
+    apiUrl:        d.PORTAL_API_URL,
+    internalToken: d.SSO_INTERNAL_TOKEN,
   },
   googleMaps: {
     apiKey: d.GOOGLE_MAPS_API_KEY,

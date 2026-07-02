@@ -61,7 +61,7 @@ export default async function masterRoutes(fastify: FastifyInstance) {
   fastify.get('/ref-grade', { preHandler: [fastify.authenticate] }, async () => {
     try {
       const res = await fetch(`${config.portal.apiUrl}/api/sso/grades`, {
-        headers: { 'x-internal': '1' },
+        headers: { 'x-internal': config.portal.internalToken },
       });
       if (res.ok) {
         const body = await res.json() as { data: any[] };

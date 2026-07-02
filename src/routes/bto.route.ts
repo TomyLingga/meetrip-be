@@ -246,7 +246,7 @@ export default async function btoRoutes(fastify: FastifyInstance) {
 
     if (cfg.mode === 'fixed_person' && cfg.fixedEmployeeId) {
       const portalRes = await fetch(`${config.portal.apiUrl}/api/sso/employees?id=${cfg.fixedEmployeeId}`, {
-        headers: { 'x-internal': '1' },
+        headers: { 'x-internal': config.portal.internalToken },
       })
       const data = await portalRes.json().catch(() => ({ data: [] })) as { data: any[] }
       return reply.send(ok({ mode: 'fixed_person', options: data.data ?? [] }))
@@ -264,7 +264,7 @@ export default async function btoRoutes(fastify: FastifyInstance) {
     }
 
     const portalRes = await fetch(`${config.portal.apiUrl}/api/sso/employees?aboveGradeLevel=${gradeLevel}`, {
-      headers: { 'x-internal': '1' },
+      headers: { 'x-internal': config.portal.internalToken },
     })
     const data = await portalRes.json().catch(() => ({ data: [] })) as { data: any[] }
     const options = (data.data ?? []).filter((emp: any) => emp.id !== req.user.sub && emp.employeeId !== req.user.employeeId);

@@ -107,7 +107,7 @@ export async function kalkulasiPaguBto(params: {
 export async function getGradeIdByLevel(gradeLevel: number): Promise<string | null> {
   try {
     const res = await fetch(`${appConfig.portal.apiUrl}/api/sso/grades`, {
-      headers: { 'x-internal': '1' },
+      headers: { 'x-internal': appConfig.portal.internalToken },
     })
     if (res.ok) {
       const body = await res.json() as { data: any[] }

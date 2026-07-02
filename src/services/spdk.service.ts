@@ -30,7 +30,7 @@ export async function issueSpdkService(btoId: string, actor: { id: string; nama:
           const atasanId = employeeData.data?.atasanId
           if (atasanId) {
             const atasanUserRes = await fetch(`${appConfig.portal.apiUrl}/api/sso/employees?id=${atasanId}`, {
-              headers: { 'x-internal': '1' },
+              headers: { 'x-internal': appConfig.portal.internalToken },
             })
             if (atasanUserRes.ok) {
               const atasanUserData = await atasanUserRes.json() as any
