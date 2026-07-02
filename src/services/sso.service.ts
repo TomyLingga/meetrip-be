@@ -1,29 +1,29 @@
 // ─── SSO Service ──────────────────────────────────────────────────────────────
 // Verifikasi sso_token ke portal, buat session JWT lokal MeeTrip
-import { db }      from '../db/connection'
+import { db } from '../db/connection'
 import { localUserCache, refreshToken, meetripUserRole } from '../db/schema'
-import { eq }      from 'drizzle-orm'
-import { config }  from '../config/env'
+import { eq } from 'drizzle-orm'
+import { config } from '../config/env'
 import { AppError } from '../utils/errorHandler'
-import crypto      from 'crypto'
+import crypto from 'crypto'
 import type { FastifyInstance } from 'fastify'
-import type { JwtPayload }      from '../plugins/auth'
+import type { JwtPayload } from '../plugins/auth'
 
 // ─── Tipe data user dari portal (response /api/sso/verify) ───────────────────
 interface PortalUser {
-  id:         string
-  email:      string
-  role:       string
+  id: string
+  email: string
+  role: string
   employee?: {
-    id:          string
+    id: string
     namaLengkap: string
-    jabatan?:    string
+    jabatan?: string
     grade?: { kode: string; level: number }
-    unit?:  { id: string; nama: string }
+    unit?: { id: string; nama: string }
     penempatanArea?: {
-      id:        string
-      nama:      string
-      latitude:  string
+      id: string
+      nama: string
+      latitude: string
       longitude: string
     }
   }
@@ -69,21 +69,21 @@ export async function loginSsoService(
   // 2. Upsert local_user_cache
   const emp = portalUser.employee
   const cacheData = {
-    portalUserId:       portalUser.id,
-    email:              portalUser.email,
-    role:               meeTripRole, // simpan role MeeTrip di local cache
-    nama:               emp?.namaLengkap ?? null,
-    employeeId:         emp?.id          ?? null,
-    gradeKode:          emp?.grade?.kode ?? null,
-    gradeLevel:         emp?.grade?.level ?? null,
-    unitId:             emp?.unit?.id   ?? null,
-    unitNama:           emp?.unit?.nama ?? null,
-    penempatanAreaId:   emp?.penempatanArea?.id ?? null,
-    penempatanNama:     emp?.penempatanArea?.nama ?? null,
-    penempatanLat:      emp?.penempatanArea?.latitude ?? null,
-    penempatanLng:      emp?.penempatanArea?.longitude ?? null,
+    portalUserId: portalUser.id,
+    email: portalUser.email,
+    role: meeTripRole, // simpan role MeeTrip di local cache
+    nama: emp?.namaLengkap ?? null,
+    employeeId: emp?.id ?? null,
+    gradeKode: emp?.grade?.kode ?? null,
+    gradeLevel: emp?.grade?.level ?? null,
+    unitId: emp?.unit?.id ?? null,
+    unitNama: emp?.unit?.nama ?? null,
+    penempatanAreaId: emp?.penempatanArea?.id ?? null,
+    penempatanNama: emp?.penempatanArea?.nama ?? null,
+    penempatanLat: emp?.penempatanArea?.latitude ?? null,
+    penempatanLng: emp?.penempatanArea?.longitude ?? null,
     penempatanProvinsi: null as string | null, // diisi saat geocode (lazy)
-    lastSync:           new Date(),
+    lastSync: new Date(),
   }
 
   const existing = await db.query.localUserCache.findFirst({
@@ -104,37 +104,37 @@ export async function loginSsoService(
 
   // 3. Buat JWT MeeTrip
   const payload: JwtPayload = {
-    sub:        portalUser.id,
-    email:      portalUser.email,
-    employeeId: emp?.id          ?? null,
-    nama:       emp?.namaLengkap ?? null,
+    sub: portalUser.id,
+    email: portalUser.email,
+    employeeId: emp?.id ?? null,
+    nama: emp?.namaLengkap ?? null,
     gradeLevel: emp?.grade?.level ?? null,
-    role:       meeTripRole,
+    role: meeTripRole,
   }
 
-  const accessToken  = fastify.jwt.sign(payload, { expiresIn: config.jwt.expiresIn })
-  const rawRefresh   = crypto.randomBytes(40).toString('hex')
+  const accessToken = fastify.jwt.sign(payload, { expiresIn: config.jwt.expiresIn })
+  const rawRefresh = crypto.randomBytes(40).toString('hex')
   const refreshExpMs = parseDuration(config.jwt.refreshExpiresIn)
 
   await db.insert(refreshToken).values({
-    userId:    portalUser.id,
-    token:     rawRefresh,
+    userId: portalUser.id,
+    token: rawRefresh,
     expiresAt: new Date(Date.now() + refreshExpMs),
   })
 
   return {
     accessToken,
     refreshToken: rawRefresh,
-    expiresIn:    config.jwt.expiresIn,
+    expiresIn: config.jwt.expiresIn,
     user: {
-      id:         portalUser.id,
-      email:      portalUser.email,
-      role:       meeTripRole,
-      nama:       emp?.namaLengkap ?? null,
-      jabatan:    portalUser.employee?.jabatan ?? null,
+      id: portalUser.id,
+      email: portalUser.email,
+      role: meeTripRole,
+      nama: emp?.namaLengkap ?? null,
+      jabatan: portalUser.employee?.jabatan ?? null,
       gradeLevel: emp?.grade?.level ?? null,
-      gradeKode:  emp?.grade?.kode  ?? null,
-      unitNama:   emp?.unit?.nama   ?? null,
+      gradeKode: emp?.grade?.kode ?? null,
+      unitNama: emp?.unit?.nama ?? null,
     },
   }
 }
@@ -162,30 +162,30 @@ export async function refreshSsoTokenService(
   const meeTripRole = await getMeeTripRole(userCache.portalUserId)
 
   const payload: JwtPayload = {
-    sub:        userCache.portalUserId,
-    email:      userCache.email,
+    sub: userCache.portalUserId,
+    email: userCache.email,
     employeeId: userCache.employeeId,
-    nama:       userCache.nama,
+    nama: userCache.nama,
     gradeLevel: userCache.gradeLevel,
-    role:       meeTripRole,
+    role: meeTripRole,
   }
 
   const newAccessToken = fastify.jwt.sign(payload, { expiresIn: config.jwt.expiresIn })
 
   // Rotate refresh token
-  const rawRefresh   = crypto.randomBytes(40).toString('hex')
+  const rawRefresh = crypto.randomBytes(40).toString('hex')
   const refreshExpMs = parseDuration(config.jwt.refreshExpiresIn)
   await db.delete(refreshToken).where(eq(refreshToken.token, token))
   await db.insert(refreshToken).values({
-    userId:    rt.userId,
-    token:     rawRefresh,
+    userId: rt.userId,
+    token: rawRefresh,
     expiresAt: new Date(Date.now() + refreshExpMs),
   })
 
   return {
-    accessToken:  newAccessToken,
+    accessToken: newAccessToken,
     refreshToken: rawRefresh,
-    expiresIn:    config.jwt.expiresIn,
+    expiresIn: config.jwt.expiresIn,
   }
 }
 
@@ -204,6 +204,6 @@ function parseDuration(s: string): number {
     case 'm': return n * 60 * 1000
     case 'h': return n * 3600 * 1000
     case 'd': return n * 86400 * 1000
-    default:  return 86400 * 1000
+    default: return 86400 * 1000
   }
 }
