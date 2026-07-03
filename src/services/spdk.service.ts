@@ -1,4 +1,5 @@
 // ─── SPDK Service ─────────────────────────────────────────────────────────────
+// ─── SPDK Service ─────────────────────────────────────────────────────────────
 import { db }          from '../db/connection'
 import { spdk, spdkApprovalLog, bto, attendStamp, configApproverSpdk, localUserCache } from '../db/schema'
 import { eq, sql }     from 'drizzle-orm'
@@ -8,7 +9,21 @@ import { haversineKm } from './geocoding.service'
 import { config as appConfig } from '../config/env'
 
 // ─── Terbitkan SPDK ───────────────────────────────────────────────────────────
-export async function issueSpdkService(btoId: string, actor: { id: string; nama: string }, catatanAdmin?: string) {
+export async function issueSpdkService(
+  btoId: string,
+  actor: { id: string; nama: string },
+  catatanAdmin?: string,
+  customNomorSpdk?: string,
+  btoUpdateData?: any
+) {
+  if (btoUpdateData && Object.keys(btoUpdateData).length > 0) {
+    const cleanUpdate: any = { ...btoUpdateData, updatedAt: new Date() }
+    if (cleanUpdate.estBerangkat) cleanUpdate.estBerangkat = new Date(cleanUpdate.estBerangkat)
+    if (cleanUpdate.estKembali) cleanUpdate.estKembali = new Date(cleanUpdate.estKembali)
+    
+    await db.update(bto).set(cleanUpdate).where(eq(bto.id, btoId))
+  }
+
   const [btoRow] = await db.select().from(bto).where(eq(bto.id, btoId)).limit(1)
   if (!btoRow) throw new AppError('BTO tidak ditemukan', 404)
   if (btoRow.status !== 'SPDK_DRAFT') throw new AppError('BTO belum di tahap SPDK Draft', 400)
@@ -61,7 +76,7 @@ export async function issueSpdkService(btoId: string, actor: { id: string; nama:
     sql`SELECT COALESCE(MAX(CAST(sequence AS INTEGER)), 0) + 1 AS next_seq FROM spdk WHERE tahun = ${String(tahun)}`
   )
   const sequence = Number((seqRow.rows[0] as any).next_seq)
-  const nomorSpdk = generateNomor(sequence, 'SPDK', now)
+  const nomorSpdk = customNomorSpdk || generateNomor(sequence, 'SPDK', now)
 
   const spdkStatus = autoApprove ? 'APPROVED' : 'KABAG_REVIEW'
 

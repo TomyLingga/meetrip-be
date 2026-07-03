@@ -1,7 +1,7 @@
 // ─── BTO Service ──────────────────────────────────────────────────────────────
 // State machine BTO: Create, Submit, Approval flow
 import { db }        from '../db/connection'
-import { bto, btoApprovalLog, dp, localUserCache, configPemberiTugas, configApproverSpdk } from '../db/schema'
+import { bto, btoApprovalLog, dp, localUserCache, configPemberiTugas, configApproverSpdk, refTransport } from '../db/schema'
 import { eq, desc, and, gte, lte, like, or, sql } from 'drizzle-orm'
 import { AppError }  from '../utils/errorHandler'
 import { generateNomor } from '../utils/romanNumeral'
@@ -10,24 +10,34 @@ import { config as appConfig } from '../config/env'
 import { getGradeIdByLevel, hitungDurasiHariMalam, validateRincianAgainstPagu } from './pagu.service'
 
 // ─── Buat BTO baru (DRAFT) ───────────────────────────────────────────────────
-export async function createBtoService(employeeId: string, data: {
-  tujuanNama:   string
-  tujuanLat:    number
-  tujuanLng:    number
-  kepentingan:  string
-  transportId?: string
-  estBerangkat: Date
-  estKembali:   Date
-  estimasiWaktuMenit?: number
-  butuhDp:      boolean
-  pemberiTugasId?: string
-  pemberiTugasNama?: string
-}) {
+export async function createBtoService(
+  employeeId: string,
+  employeeNama: string | null,
+  data: {
+    tujuanNama:   string
+    tujuanLat:    number
+    tujuanLng:    number
+    kepentingan:  string
+    transportId?: string
+    estBerangkat: Date
+    estKembali:   Date
+    estimasiWaktuMenit?: number
+    butuhDp:      boolean
+    pemberiTugasId?: string
+    pemberiTugasNama?: string
+    barang?: string | null
+    jarakKm?: number | null
+    wilayahTipe?: 'dalam_wilayah' | 'luar_wilayah' | 'luar_negeri' | null
+  }
+) {
   const [inserted] = await db.insert(bto).values({
     employeeId,
+    employeeNama,
     ...data,
     tujuanLat:    String(data.tujuanLat),
     tujuanLng:    String(data.tujuanLng),
+    jarakKm:      data.jarakKm ? String(data.jarakKm) : null,
+    wilayahTipe:  data.wilayahTipe ?? null,
     status:       'DRAFT',
   }).returning()
   return inserted
@@ -74,19 +84,42 @@ export async function submitBtoService(id: string, actor: { id: string; nama: st
   const userCache = await db.query.localUserCache.findFirst({
     where: eq(localUserCache.portalUserId, actor.id),
   })
-  
-  let userProvinsi = userCache?.penempatanProvinsi ?? null
-  if (!userProvinsi && userCache?.penempatanLat && userCache?.penempatanLng) {
+
+  let penempatanLat = userCache?.penempatanLat ?? null
+  let penempatanLng = userCache?.penempatanLng ?? null
+
+  if (userCache?.employeeId) {
     try {
-      const userGeo = await reverseGeocode(Number(userCache.penempatanLat), Number(userCache.penempatanLng))
+      const portalRes = await fetch(`${appConfig.portal.apiUrl}/api/sso/employees?id=${userCache.employeeId}`, {
+        headers: { 'x-internal': appConfig.portal.internalToken },
+      })
+      if (portalRes.ok) {
+        const body = await portalRes.json() as { data: any[] }
+        const rows = body.data ?? []
+        if (rows.length > 0) {
+          const empData = rows[0]
+          if (empData.penempatanLat && empData.penempatanLng) {
+            penempatanLat = empData.penempatanLat
+            penempatanLng = empData.penempatanLng
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Gagal mengambil data koordinat penempatan dari Portal:', err)
+    }
+  }
+
+  let userProvinsi: string | null = null
+  if (penempatanLat && penempatanLng) {
+    try {
+      const userGeo = await reverseGeocode(Number(penempatanLat), Number(penempatanLng))
       userProvinsi = userGeo.provinsi
-      await db.update(localUserCache).set({ penempatanProvinsi: userGeo.provinsi }).where(eq(localUserCache.id, userCache.id))
     } catch (err) {
       console.error('Failed to reverse geocode user penempatan area:', err)
     }
   }
 
-  const wilayah = getWilayahTipe(
+  const wilayah = existing.wilayahTipe || getWilayahTipe(
     userProvinsi,
     geo.provinsi,
     geo.negara,
@@ -94,9 +127,11 @@ export async function submitBtoService(id: string, actor: { id: string; nama: st
 
   // Hitung jarak dari penempatan ke tujuan
   let jarakKm: number | undefined
-  if (userCache?.penempatanLat && userCache?.penempatanLng) {
+  if (existing.jarakKm) {
+    jarakKm = Number(existing.jarakKm)
+  } else if (penempatanLat && penempatanLng) {
     jarakKm = haversineKm(
-      Number(userCache.penempatanLat), Number(userCache.penempatanLng),
+      Number(penempatanLat), Number(penempatanLng),
       Number(existing.tujuanLat),      Number(existing.tujuanLng),
     )
   }
@@ -147,6 +182,12 @@ export async function submitBtoService(id: string, actor: { id: string; nama: st
   // Tentukan status berikutnya
   const nextStatus = existing.butuhDp ? 'ADMIN_DP_REVIEW' : 'PT_REVIEW'
 
+  let transportLabel: string | null = null
+  if (existing.transportId) {
+    const [tRow] = await db.select().from(refTransport).where(eq(refTransport.id, existing.transportId)).limit(1)
+    if (tRow) transportLabel = tRow.label
+  }
+
   await db.update(bto).set({
     status:        nextStatus,
     nomorBto,
@@ -158,6 +199,7 @@ export async function submitBtoService(id: string, actor: { id: string; nama: st
     tujuanProvinsi: geo.provinsi ?? undefined,
     tujuanNegara:  geo.negara   ?? undefined,
     jarakKm:       jarakKm ? String(jarakKm.toFixed(2)) : undefined,
+    transportLabel,
     updatedAt:     now,
   }).where(eq(bto.id, id))
 
@@ -283,4 +325,44 @@ async function logApproval(data: {
     statusKe:   data.statusKe,
     catatan:    data.catatan,
   })
+}
+
+// ─── List BTO Approvals ───────────────────────────────────────────────────────
+export async function listBtoApprovalsService(actor: { id: string; role: string }) {
+  const roleConditions = []
+
+  if (['super_admin', 'admin'].includes(actor.role)) {
+    roleConditions.push(
+      eq(bto.status, 'ADMIN_DP_REVIEW'),
+      eq(bto.status, 'SPDK_DRAFT')
+    )
+  }
+
+  if (actor.role === 'sdm') {
+    roleConditions.push(
+      eq(bto.status, 'SDM_REVIEW')
+    )
+  }
+
+  const [cfg] = await db.select().from(configApproverSpdk).where(eq(configApproverSpdk.isActive, true)).limit(1)
+  if (cfg && cfg.fixedEmployeeId === actor.id) {
+    roleConditions.push(
+      eq(bto.status, 'KABAG_REVIEW')
+    )
+  }
+
+  roleConditions.push(
+    and(
+      eq(bto.status, 'PT_REVIEW'),
+      eq(bto.pemberiTugasId, actor.id)
+    )
+  )
+
+  if (roleConditions.length === 0) return []
+
+  const rows = await db.select().from(bto)
+    .where(or(...roleConditions))
+    .orderBy(desc(bto.createdAt))
+
+  return rows
 }

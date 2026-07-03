@@ -19,9 +19,13 @@ export default async function spdkRoutes(fastify: FastifyInstance) {
   /** POST /api/spdk/bto/:btoId — Issue SPDK (Admin only) */
   fastify.post('/bto/:btoId', { preHandler: [fastify.authenticateAdmin] }, async (req, reply) => {
     const { btoId } = req.params as { btoId: string };
-    const { catatanAdmin } = z.object({ catatanAdmin: z.string().optional() }).parse(req.body);
+    const { catatanAdmin, nomorSpdk, btoUpdateData } = z.object({
+      catatanAdmin: z.string().optional(),
+      nomorSpdk: z.string().optional(),
+      btoUpdateData: z.any().optional(),
+    }).parse(req.body);
     const actor = { id: req.user.sub, nama: req.user.nama || '' };
-    const result = await issueSpdkService(btoId, actor, catatanAdmin);
+    const result = await issueSpdkService(btoId, actor, catatanAdmin, nomorSpdk, btoUpdateData);
     return reply.status(201).send(ok(result));
   });
 
@@ -47,6 +51,14 @@ export default async function spdkRoutes(fastify: FastifyInstance) {
       .offset(offset);
 
     return reply.send(paginated(rows, page, limit, Number(totalRow.count)));
+  });
+
+  /** GET /api/spdk/bto/:btoId — Get SPDK by BTO ID */
+  fastify.get('/bto/:btoId', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { btoId } = req.params as { btoId: string };
+    const [row] = await db.select().from(spdk).where(eq(spdk.btoId, btoId)).limit(1);
+    if (!row) throw new AppError('SPDK tidak ditemukan', 404);
+    return reply.send(ok(row));
   });
 
   /** GET /api/spdk/:id — Detail SPDK */

@@ -106,7 +106,20 @@ export async function kalkulasiPaguBto(params: {
 
     const pagu = await getPaguAktif(rincian.id, params.gradeId, params.wilayahTipe, params.tanggal)
 
-    if (!pagu) continue // tidak ada pagu untuk kombinasi ini, skip
+    if (!pagu) {
+      results.push({
+        rincianId:    rincian.id,
+        rincianLabel: rincian.label,
+        isUnlimited:  false,
+        hasPagu:      true,
+        perMalam:     rincian.perMalam,
+        useDollar:    rincian.useDollarOverride,
+        nilaiPerHari: 0,
+        nilaiTotal:   0,
+        paguMax:      0,
+      })
+      continue
+    }
 
     const hari   = rincian.perMalam ? params.jumlahMalam : params.jumlahHari
     const total  = pagu.isUnlimited ? 0 : pagu.nilai * hari

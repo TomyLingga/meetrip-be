@@ -54,6 +54,7 @@ export const bto = pgTable('bto', {
   jarakKm:           numeric('jarak_km', { precision: 10, scale: 2 }),
   // Detail dinas
   kepentingan:       text('kepentingan').notNull(),
+  barang:            text('barang'),
   transportId:       uuid('transport_id').references(() => refTransport.id),
   transportLabel:    varchar('transport_label', { length: 100 }),
   // Waktu
