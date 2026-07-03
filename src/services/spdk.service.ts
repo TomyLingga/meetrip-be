@@ -12,6 +12,8 @@ export async function issueSpdkService(btoId: string, actor: { id: string; nama:
   const [btoRow] = await db.select().from(bto).where(eq(bto.id, btoId)).limit(1)
   if (!btoRow) throw new AppError('BTO tidak ditemukan', 404)
   if (btoRow.status !== 'SPDK_DRAFT') throw new AppError('BTO belum di tahap SPDK Draft', 400)
+  const existingSpdk = await db.query.spdk.findFirst({ where: eq(spdk.btoId, btoId) })
+  if (existingSpdk) throw new AppError('SPDK untuk BTO ini sudah pernah diterbitkan', 400)
 
   // Tentukan approver SPDK
   const [cfg] = await db.select().from(configApproverSpdk).where(eq(configApproverSpdk.isActive, true)).limit(1)
@@ -107,11 +109,15 @@ export async function kabagApproveSpdkService(
   spdkId: string,
   aksi: 'approve' | 'reject',
   actor: { id: string; nama: string },
+  isAdmin: boolean,
   catatan?: string,
 ) {
   const [spdkRow] = await db.select().from(spdk).where(eq(spdk.id, spdkId)).limit(1)
   if (!spdkRow) throw new AppError('SPDK tidak ditemukan', 404)
   if (spdkRow.status !== 'KABAG_REVIEW') throw new AppError('Bukan tahap Kabag review', 400)
+  if (!isAdmin && spdkRow.approverKabagId !== actor.id) {
+    throw new AppError('Anda bukan approver SPDK ini', 403)
+  }
 
   const nextStatusSpdk = aksi === 'approve' ? 'APPROVED' : 'REJECTED'
   const nextStatusBto  = aksi === 'approve' ? 'ACTIVE'   : 'REJECTED'
@@ -133,10 +139,17 @@ export async function attendStampService(
   stampLat: number | null,
   stampLng: number | null,
   isAdminOverride: boolean,
+  isAdmin: boolean,
 ) {
   const [btoRow] = await db.select().from(bto).where(eq(bto.id, btoId)).limit(1)
   if (!btoRow) throw new AppError('BTO tidak ditemukan', 404)
   if (btoRow.status !== 'ACTIVE') throw new AppError('BTO belum berstatus ACTIVE', 400)
+  if (isAdminOverride && !isAdmin) {
+    throw new AppError('Hanya admin yang bisa melakukan override stamp', 403)
+  }
+  if (!isAdminOverride && btoRow.employeeId !== actor.id) {
+    throw new AppError('Attend stamp hanya bisa dilakukan oleh pemilik BTO', 403)
+  }
 
   let finalLat = stampLat
   let finalLng = stampLng

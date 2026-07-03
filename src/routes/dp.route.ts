@@ -37,7 +37,8 @@ export default async function dpRoutes(fastify: FastifyInstance) {
     const { btoId } = req.params as { btoId: string };
     const data = dpUpsertSchema.parse(req.body);
     const actor = { id: req.user.sub, nama: req.user.nama || '' };
-    const result = await createOrUpdateDpService(btoId, actor, data);
+    const isAdmin = ['super_admin', 'admin'].includes(req.user.role || '');
+    const result = await createOrUpdateDpService(btoId, actor, isAdmin, data);
     return reply.send(ok(result));
   });
 

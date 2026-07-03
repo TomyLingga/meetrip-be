@@ -49,7 +49,7 @@ export default fp(async function authPlugin(fastify: FastifyInstance) {
     try {
       await request.jwtVerify()
       const user = request.user as JwtPayload
-      if (user.role !== 'admin') {
+      if (user.role !== 'admin' && user.role !== 'super_admin') {
         return reply.status(403).send({ success: false, error: 'Forbidden: Admin only' })
       }
     } catch {

@@ -4,6 +4,7 @@ import { db }   from '../db/connection'
 import { refPagu, refRincianBiaya } from '../db/schema'
 import { eq, and, or, isNull, lte, gte } from 'drizzle-orm'
 import { config as appConfig } from '../config/env'
+import { AppError } from '../utils/errorHandler'
 
 export interface PaguResult {
   rincianId:   string
@@ -15,6 +16,29 @@ export interface PaguResult {
   nilaiPerHari: number   // 0 jika unlimited
   nilaiTotal:   number   // nilaiPerHari × jumlahHari
   paguMax:      number   // batas maksimal
+}
+
+export interface RincianPaguInput {
+  rincianId: string
+  rincianLabel?: string | null
+  nilaiTotal: number
+  nilaiUsd?: number | null
+  useDollar: boolean
+}
+
+export function hitungDurasiHariMalam(berangkat: Date, kembali: Date) {
+  const startD = new Date(berangkat.getFullYear(), berangkat.getMonth(), berangkat.getDate())
+  const endD   = new Date(kembali.getFullYear(), kembali.getMonth(), kembali.getDate())
+  const diffDays = Math.floor((endD.getTime() - startD.getTime()) / (1000 * 60 * 60 * 24))
+
+  if (diffDays < 0) {
+    throw new AppError('Tanggal kembali tidak boleh sebelum tanggal berangkat', 400)
+  }
+
+  return {
+    jumlahHari: diffDays + 1,
+    jumlahMalam: Math.max(0, diffDays),
+  }
 }
 
 // ─── Lookup pagu aktif pada tanggal tertentu ─────────────────────────────────
@@ -101,6 +125,45 @@ export async function kalkulasiPaguBto(params: {
   }
 
   return results
+}
+
+export async function validateRincianAgainstPagu(params: {
+  gradeId: string
+  wilayahTipe: string
+  tanggal: Date
+  jumlahHari: number
+  jumlahMalam: number
+  rincian: RincianPaguInput[]
+}) {
+  const paguList = await kalkulasiPaguBto({
+    gradeId: params.gradeId,
+    wilayahTipe: params.wilayahTipe,
+    tanggal: params.tanggal,
+    jumlahHari: params.jumlahHari,
+    jumlahMalam: params.jumlahMalam,
+  })
+  const paguByRincianId = new Map(paguList.map((p) => [p.rincianId, p]))
+
+  for (const item of params.rincian) {
+    const pagu = paguByRincianId.get(item.rincianId)
+    const label = item.rincianLabel || 'Rincian biaya'
+
+    if (!pagu) {
+      throw new AppError(`Pagu untuk '${label}' belum dikonfigurasi`, 400)
+    }
+    if (pagu.isUnlimited || !pagu.hasPagu) continue
+
+    const nilaiDiajukan = item.useDollar
+      ? Number(item.nilaiUsd ?? item.nilaiTotal)
+      : Number(item.nilaiTotal)
+
+    if (nilaiDiajukan > pagu.paguMax) {
+      throw new AppError(
+        `Pengajuan biaya '${label}' sebesar ${nilaiDiajukan} melebihi pagu sebesar ${pagu.paguMax}`,
+        400,
+      )
+    }
+  }
 }
 
 // ─── Lookup gradeId dari gradeLevel ──────────────────────────────────────────

@@ -1,12 +1,13 @@
 // ─── BTO Service ──────────────────────────────────────────────────────────────
 // State machine BTO: Create, Submit, Approval flow
 import { db }        from '../db/connection'
-import { bto, btoApprovalLog, localUserCache, configPemberiTugas, configApproverSpdk } from '../db/schema'
+import { bto, btoApprovalLog, dp, localUserCache, configPemberiTugas, configApproverSpdk } from '../db/schema'
 import { eq, desc, and, gte, lte, like, or, sql } from 'drizzle-orm'
 import { AppError }  from '../utils/errorHandler'
 import { generateNomor } from '../utils/romanNumeral'
 import { reverseGeocode, getWilayahTipe, haversineKm } from './geocoding.service'
 import { config as appConfig } from '../config/env'
+import { getGradeIdByLevel, hitungDurasiHariMalam, validateRincianAgainstPagu } from './pagu.service'
 
 // ─── Buat BTO baru (DRAFT) ───────────────────────────────────────────────────
 export async function createBtoService(employeeId: string, data: {
@@ -55,12 +56,15 @@ export async function updateBtoService(
 }
 
 // ─── Submit BTO ───────────────────────────────────────────────────────────────
-export async function submitBtoService(id: string, actor: { id: string; nama: string }) {
+export async function submitBtoService(id: string, actor: { id: string; nama: string; gradeLevel?: number | null }) {
   const [existing] = await db.select().from(bto).where(eq(bto.id, id)).limit(1)
   if (!existing) throw new AppError('BTO tidak ditemukan', 404)
   if (existing.employeeId !== actor.id) throw new AppError('Bukan milik Anda', 403)
   if (existing.status !== 'DRAFT' && existing.status !== 'REVISION_DP') {
     throw new AppError(`Tidak bisa submit dari status ${existing.status}`, 400)
+  }
+  if (!existing.pemberiTugasId) {
+    throw new AppError('Pemberi tugas wajib dipilih sebelum BTO diajukan', 400)
   }
 
   // Geocode tujuan → wilayah_tipe
@@ -97,6 +101,40 @@ export async function submitBtoService(id: string, actor: { id: string; nama: st
     )
   }
 
+  if (existing.butuhDp) {
+    const dpRow = await db.query.dp.findFirst({
+      where: eq(dp.btoId, id),
+      with: { dpRincian: true },
+    })
+    if (!dpRow || dpRow.dpRincian.length === 0) {
+      throw new AppError('Rincian DP wajib diisi sebelum BTO diajukan', 400)
+    }
+
+    const gradeLevel = userCache?.gradeLevel ?? actor.gradeLevel
+    const gradeId = gradeLevel != null ? await getGradeIdByLevel(gradeLevel) : null
+    if (!gradeId) throw new AppError('Grade karyawan tidak ditemukan di master', 400)
+
+    const { jumlahHari, jumlahMalam } = hitungDurasiHariMalam(
+      new Date(existing.estBerangkat),
+      new Date(existing.estKembali),
+    )
+
+    await validateRincianAgainstPagu({
+      gradeId,
+      wilayahTipe: wilayah,
+      tanggal: new Date(existing.estBerangkat),
+      jumlahHari,
+      jumlahMalam,
+      rincian: dpRow.dpRincian.map((item) => ({
+        rincianId: item.rincianId,
+        rincianLabel: item.rincianLabel,
+        nilaiTotal: Number(item.nilaiTotal),
+        nilaiUsd: Number(item.nilaiUsd ?? 0),
+        useDollar: item.useDollar,
+      })),
+    })
+  }
+
   // Generate nomor BTO
   const now      = new Date()
   const tahun    = now.getFullYear()
@@ -123,6 +161,14 @@ export async function submitBtoService(id: string, actor: { id: string; nama: st
     updatedAt:     now,
   }).where(eq(bto.id, id))
 
+  if (existing.butuhDp) {
+    await db.update(dp).set({
+      status: 'ADMIN_REVIEW',
+      submittedAt: now,
+      updatedAt: now,
+    }).where(eq(dp.btoId, id))
+  }
+
   await logApproval({ btoId: id, tahap: 'user', aksi: 'submit', actorId: actor.id, actorNama: actor.nama, statusDari: existing.status, statusKe: nextStatus })
 
   return { nomorBto, status: nextStatus, wilayahTipe: wilayah }
@@ -136,8 +182,10 @@ export async function adminApproveDpService(id: string, aksi: 'approve' | 'rejec
 
   const statusMap = { approve: 'PT_REVIEW', reject: 'REJECTED', revision: 'REVISION_DP' } as const
   const nextStatus = statusMap[aksi]
+  const dpStatusMap = { approve: 'APPROVED', reject: 'REJECTED', revision: 'REVISION' } as const
 
   await db.update(bto).set({ status: nextStatus, catatanAdmin: catatan, updatedAt: new Date() }).where(eq(bto.id, id))
+  await db.update(dp).set({ status: dpStatusMap[aksi], updatedAt: new Date() }).where(eq(dp.btoId, id))
   await logApproval({ btoId: id, tahap: 'admin_dp', aksi, actorId: actor.id, actorNama: actor.nama, statusDari: existing.status, statusKe: nextStatus, catatan })
   return { status: nextStatus }
 }
@@ -177,6 +225,8 @@ export async function sdmApproveService(id: string, aksi: 'approve' | 'reject', 
 // ─── List BTO ─────────────────────────────────────────────────────────────────
 export async function listBtoService(filters: {
   employeeId?: string
+  viewerRole?: string
+  isAdmin?: boolean
   status?: string
   dateFrom?: Date
   dateTo?: Date
@@ -184,7 +234,22 @@ export async function listBtoService(filters: {
   limit: number
 }) {
   const conditions = []
-  if (filters.employeeId) conditions.push(eq(bto.employeeId, filters.employeeId))
+
+  if (filters.isAdmin) {
+    if (filters.employeeId) {
+      conditions.push(eq(bto.employeeId, filters.employeeId))
+    }
+  } else if (filters.employeeId) {
+    const userOrApproverConditions = [
+      eq(bto.employeeId, filters.employeeId),
+      eq(bto.pemberiTugasId, filters.employeeId)
+    ]
+    if (filters.viewerRole === 'sdm') {
+      userOrApproverConditions.push(eq(bto.status, 'SDM_REVIEW'))
+    }
+    conditions.push(or(...userOrApproverConditions))
+  }
+
   if (filters.status)     conditions.push(eq(bto.status, filters.status as any))
   if (filters.dateFrom)   conditions.push(gte(bto.createdAt, filters.dateFrom))
   if (filters.dateTo)     conditions.push(lte(bto.createdAt, filters.dateTo))

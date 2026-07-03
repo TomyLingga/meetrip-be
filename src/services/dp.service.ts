@@ -11,12 +11,17 @@ export async function getDpByBtoIdService(btoId: string) {
       dpRincian: true,
     },
   });
-  return row || null;
+  if (!row) return null;
+  return {
+    ...row,
+    rincian: row.dpRincian,
+  };
 }
 
 export async function createOrUpdateDpService(
   btoId: string,
   actor: { id: string; nama: string },
+  isAdmin: boolean,
   data: {
     exchangeRateUsd?: number;
     rincian: Array<{
@@ -36,7 +41,13 @@ export async function createOrUpdateDpService(
   // Check BTO status
   const [btoRow] = await db.select().from(bto).where(eq(bto.id, btoId)).limit(1);
   if (!btoRow) throw new AppError('BTO tidak ditemukan', 404);
-  if (btoRow.status !== 'DRAFT' && btoRow.status !== 'REVISION_DP') {
+  if (!isAdmin && btoRow.employeeId !== actor.id) {
+    throw new AppError('Tidak diizinkan mengubah DP BTO ini', 403);
+  }
+  if (!btoRow.butuhDp) {
+    throw new AppError('BTO ini tidak membutuhkan DP', 400);
+  }
+  if (!isAdmin && btoRow.status !== 'DRAFT' && btoRow.status !== 'REVISION_DP') {
     throw new AppError('DP hanya bisa diisi saat BTO berstatus DRAFT atau REVISION_DP', 400);
   }
 

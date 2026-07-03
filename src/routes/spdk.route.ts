@@ -68,7 +68,8 @@ export default async function spdkRoutes(fastify: FastifyInstance) {
     }).parse(req.body);
     
     const actor = { id: req.user.sub, nama: req.user.nama || '' };
-    const result = await kabagApproveSpdkService(id, aksi, actor, catatan);
+    const isAdmin = ['super_admin', 'admin'].includes(req.user.role || '');
+    const result = await kabagApproveSpdkService(id, aksi, actor, isAdmin, catatan);
     return reply.send(ok(result));
   });
 
@@ -83,7 +84,8 @@ export default async function spdkRoutes(fastify: FastifyInstance) {
     }
 
     const actor = { id: req.user.sub, nama: req.user.nama || '' };
-    const result = await attendStampService(btoId, actor, latitude, longitude, isAdminOverride);
+    const isAdmin = ['super_admin', 'admin'].includes(userRole);
+    const result = await attendStampService(btoId, actor, latitude, longitude, isAdminOverride, isAdmin);
     return reply.send(ok(result));
   });
 }

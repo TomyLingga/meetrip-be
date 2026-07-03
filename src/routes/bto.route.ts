@@ -7,6 +7,7 @@ import {
   listBtoService,
 } from '../services/bto.service'
 import { kalkulasiPaguBto, getGradeIdByLevel } from '../services/pagu.service'
+import { reverseGeocode, getWilayahTipe } from '../services/geocoding.service'
 import { db } from '../db/connection'
 import { bto, btoApprovalLog, configPemberiTugas, localUserCache } from '../db/schema'
 import { eq } from 'drizzle-orm'
@@ -67,6 +68,8 @@ export default async function btoRoutes(fastify: FastifyInstance) {
     const isAdmin = ['super_admin', 'admin'].includes(req.user.role ?? '')
     const result = await listBtoService({
       employeeId: isAdmin ? q.employeeId : req.user.sub,
+      viewerRole: req.user.role,
+      isAdmin,
       status:     q.status,
       dateFrom:   q.dateFrom ? new Date(q.dateFrom) : undefined,
       dateTo:     q.dateTo   ? new Date(q.dateTo)   : undefined,
@@ -107,6 +110,17 @@ export default async function btoRoutes(fastify: FastifyInstance) {
   /** POST /api/bto/:id/lampiran — Upload lampiran (multipart) */
   fastify.post('/:id/lampiran', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { id } = req.params as { id: string }
+    const [row] = await db.select().from(bto).where(eq(bto.id, id)).limit(1)
+    if (!row) throw new AppError('BTO tidak ditemukan', 404)
+
+    const isAdmin = ['super_admin', 'admin'].includes(req.user.role ?? '')
+    if (!isAdmin && row.employeeId !== req.user.sub) {
+      throw new AppError('Tidak diizinkan mengupload lampiran BTO ini', 403)
+    }
+    if (!isAdmin && row.status !== 'DRAFT' && row.status !== 'REVISION_DP') {
+      throw new AppError('Lampiran hanya bisa diupload saat BTO draft atau revisi DP', 400)
+    }
+
     const data   = await req.file()
     if (!data) throw new AppError('File tidak ditemukan', 400)
 
@@ -176,7 +190,7 @@ export default async function btoRoutes(fastify: FastifyInstance) {
   /** POST /api/bto/:id/submit */
   fastify.post('/:id/submit', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { id } = req.params as { id: string }
-    const result  = await submitBtoService(id, { id: req.user.sub, nama: req.user.nama ?? '' })
+    const result  = await submitBtoService(id, { id: req.user.sub, nama: req.user.nama ?? '', gradeLevel: req.user.gradeLevel })
     return reply.send(ok(result))
   })
 
@@ -269,5 +283,66 @@ export default async function btoRoutes(fastify: FastifyInstance) {
     const data = await portalRes.json().catch(() => ({ data: [] })) as { data: any[] }
     const options = (data.data ?? []).filter((emp: any) => emp.id !== req.user.sub && emp.employeeId !== req.user.employeeId);
     return reply.send(ok({ mode: 'grade_based', options }))
+  })
+
+  /** POST /api/bto/hitung-pagu — Hitung pagu estimasi sebelum buat BTO */
+  fastify.post('/hitung-pagu', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { estBerangkat, estKembali, tujuanLat, tujuanLng } = z.object({
+      estBerangkat: z.string(),
+      estKembali:   z.string(),
+      tujuanLat:    z.number(),
+      tujuanLng:    z.number(),
+    }).parse(req.body)
+
+    const gradeId = await getGradeIdByLevel(req.user.gradeLevel ?? 0)
+    if (!gradeId) throw new AppError('Grade karyawan tidak ditemukan di master', 400)
+
+    // Geocode tujuan → wilayah_tipe
+    const geo = await reverseGeocode(Number(tujuanLat), Number(tujuanLng)).catch(() => ({ provinsi: null, negara: 'Indonesia', alamat: '' }))
+
+    // Dapatkan penempatan area user
+    const userCache = await db.query.localUserCache.findFirst({
+      where: eq(localUserCache.portalUserId, req.user.sub),
+    })
+
+    let userProvinsi = userCache?.penempatanProvinsi ?? null
+    if (!userProvinsi && userCache?.penempatanLat && userCache?.penempatanLng) {
+      try {
+        const userGeo = await reverseGeocode(Number(userCache.penempatanLat), Number(userCache.penempatanLng))
+        userProvinsi = userGeo.provinsi
+      } catch (err) {
+        console.error('Failed to geocode user penempatan:', err)
+      }
+    }
+
+    const wilayah = getWilayahTipe(
+      userProvinsi,
+      geo.provinsi,
+      geo.negara,
+    )
+
+    const start = new Date(estBerangkat)
+    const end = new Date(estKembali)
+    const startD = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+    const endD = new Date(end.getFullYear(), end.getMonth(), end.getDate())
+    const diffDays = Math.floor((endD.getTime() - startD.getTime()) / (1000 * 60 * 60 * 24))
+    const jumlahHari = diffDays + 1
+    const jumlahMalam = Math.max(0, diffDays)
+
+    const paguList = await kalkulasiPaguBto({
+      gradeId,
+      wilayahTipe: wilayah,
+      tanggal:     start,
+      jumlahHari,
+      jumlahMalam,
+    })
+
+    const mappedPaguList = paguList.map(p => ({
+      ...p,
+      nilaiLimit: p.nilaiTotal,
+      jumlahHari: p.perMalam ? jumlahMalam : jumlahHari
+    }))
+
+    return reply.send(ok({ paguList: mappedPaguList, wilayahTipe: wilayah, jumlahHari, jumlahMalam }))
   })
 }

@@ -27,11 +27,11 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
       .from(bto)
       .where(sql`status IN ('ADMIN_DP_REVIEW', 'PT_REVIEW', 'SDM_REVIEW')`);
 
-    // 3. Pending BTE approvals (BTE status = SUBMITTED)
+    // 3. Pending BTE approvals (BTE status = ADMIN_REVIEW, with legacy SUBMITTED support)
     const [pendingBteRow] = await db
       .select({ count: sql<number>`count(*)` })
       .from(bte)
-      .where(eq(bte.status, 'SUBMITTED'));
+      .where(sql`status IN ('ADMIN_REVIEW', 'SUBMITTED')`);
 
     // 4. Menunggu pencairan BTE (BTE status = PENDING_PAYMENT)
     const [pendingPaymentRow] = await db

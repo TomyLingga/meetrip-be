@@ -54,8 +54,9 @@ export default async function bteRoutes(fastify: FastifyInstance) {
   fastify.post('/bto/:btoId', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { btoId } = req.params as { btoId: string };
     const data = bteUpsertSchema.parse(req.body);
-    const actor = { id: req.user.sub, nama: req.user.nama || '' };
-    const result = await createOrUpdateBteService(btoId, actor, {
+    const actor = { id: req.user.sub, nama: req.user.nama || '', gradeLevel: req.user.gradeLevel };
+    const isAdmin = ['super_admin', 'admin'].includes(req.user.role || '');
+    const result = await createOrUpdateBteService(btoId, actor, isAdmin, {
       ...data,
       tglBerangkat: data.tglBerangkat ? new Date(data.tglBerangkat) : undefined,
       tglKembali: data.tglKembali ? new Date(data.tglKembali) : undefined,
@@ -118,6 +119,22 @@ export default async function bteRoutes(fastify: FastifyInstance) {
   /** POST /api/bte/bto/:btoId/upload-kuitansi — Upload Scan Kuitansi (1 PDF/image) */
   fastify.post('/bto/:btoId/upload-kuitansi', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { btoId } = req.params as { btoId: string };
+    const [btoRow] = await db.select().from(bto).where(eq(bto.id, btoId)).limit(1);
+    if (!btoRow) throw new AppError('BTO tidak ditemukan', 404);
+
+    const isAdmin = ['super_admin', 'admin'].includes(req.user.role || '');
+    if (!isAdmin && btoRow.employeeId !== req.user.sub) {
+      throw new AppError('Tidak diizinkan mengupload kuitansi BTE ini', 403);
+    }
+
+    const existingBte = await db.query.bte.findFirst({ where: eq(bte.btoId, btoId) });
+    const canUpload =
+      btoRow.status === 'REPORT_UPLOADED' ||
+      (btoRow.status === 'COMPLETED' && existingBte?.status === 'REVISION');
+    if (!isAdmin && !canUpload) {
+      throw new AppError('Kuitansi hanya bisa diupload saat pengisian atau revisi BTE', 400);
+    }
+
     const data = await req.file();
     if (!data) throw new AppError('File kuitansi tidak ditemukan', 400);
 
@@ -137,7 +154,7 @@ export default async function bteRoutes(fastify: FastifyInstance) {
 
     const fileRelativePath = `bte/${btoId}/${filename}`;
     
-    let bteRow = await db.query.bte.findFirst({ where: eq(bte.btoId, btoId) });
+    let bteRow = existingBte;
     if (!bteRow) {
       const [inserted] = await db.insert(bte).values({
         btoId,
@@ -161,7 +178,8 @@ export default async function bteRoutes(fastify: FastifyInstance) {
   fastify.post('/:id/submit', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const actor = { id: req.user.sub, nama: req.user.nama || '' };
-    await submitBteService(id, actor);
+    const isAdmin = ['super_admin', 'admin'].includes(req.user.role || '');
+    await submitBteService(id, actor, isAdmin);
     return reply.send(ok({ message: 'BTE diajukan' }));
   });
 
