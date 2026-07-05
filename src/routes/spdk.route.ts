@@ -1,7 +1,8 @@
 // ─── Routes: SPDK & Attend Stamp ─────────────────────────────────────────────
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { issueSpdkService, kabagApproveSpdkService, attendStampService } from '../services/spdk.service';
+import { issueSpdkService, kabagApproveSpdkService, attendStampService, updateSpdkService } from '../services/spdk.service';
+
 import { db } from '../db/connection';
 import { spdk, spdkApprovalLog } from '../db/schema';
 import { eq, desc, and, gte, lte, sql } from 'drizzle-orm';
@@ -24,7 +25,7 @@ export default async function spdkRoutes(fastify: FastifyInstance) {
       nomorSpdk: z.string().optional(),
       btoUpdateData: z.any().optional(),
     }).parse(req.body);
-    const actor = { id: req.user.sub, nama: req.user.nama || '' };
+    const actor = { id: req.user.sub, employeeId: req.user.employeeId, nama: req.user.nama || '' };
     const result = await issueSpdkService(btoId, actor, catatanAdmin, nomorSpdk, btoUpdateData);
     return reply.status(201).send(ok(result));
   });
@@ -69,6 +70,19 @@ export default async function spdkRoutes(fastify: FastifyInstance) {
 
     const logs = await db.select().from(spdkApprovalLog).where(eq(spdkApprovalLog.spdkId, id));
     return reply.send(ok({ ...row, approvalLogs: logs }));
+  });
+
+  /** PUT /api/spdk/:id — Update SPDK (Admin only) */
+  fastify.put('/:id', { preHandler: [fastify.authenticateAdmin] }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { nomorSpdk, catatanAdmin } = z.object({
+      nomorSpdk: z.string().optional(),
+      catatanAdmin: z.string().optional(),
+    }).parse(req.body);
+    
+    const isAdmin = ['super_admin', 'admin'].includes(req.user.role || '');
+    const result = await updateSpdkService(id, isAdmin, { nomorSpdk, catatanAdmin });
+    return reply.send(ok(result));
   });
 
   /** POST /api/spdk/:id/approve-kabag — Approve Kabag */

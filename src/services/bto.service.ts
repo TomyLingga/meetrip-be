@@ -1,13 +1,41 @@
 // ─── BTO Service ──────────────────────────────────────────────────────────────
 // State machine BTO: Create, Submit, Approval flow
 import { db }        from '../db/connection'
-import { bto, btoApprovalLog, dp, localUserCache, configPemberiTugas, configApproverSpdk, refTransport } from '../db/schema'
-import { eq, desc, and, gte, lte, like, or, sql } from 'drizzle-orm'
+import { bto, btoApprovalLog, dp, localUserCache, configPemberiTugas, configApproverSpdk, refTransport, spdk } from '../db/schema'
+import { eq, desc, and, gte, lte, like, or, sql, inArray } from 'drizzle-orm'
 import { AppError }  from '../utils/errorHandler'
 import { generateNomor } from '../utils/romanNumeral'
 import { reverseGeocode, getWilayahTipe, haversineKm } from './geocoding.service'
 import { config as appConfig } from '../config/env'
 import { getGradeIdByLevel, hitungDurasiHariMalam, validateRincianAgainstPagu } from './pagu.service'
+import { resolveSpdkApproverKabag } from './spdk.service'
+
+function fallbackNegaraFromWilayah(wilayahTipe?: 'dalam_wilayah' | 'luar_wilayah' | 'luar_negeri' | null) {
+  if (!wilayahTipe || wilayahTipe === 'luar_negeri') return null
+  return 'Indonesia'
+}
+
+async function resolveTujuanGeo(
+  lat: number,
+  lng: number,
+  wilayahTipe?: 'dalam_wilayah' | 'luar_wilayah' | 'luar_negeri' | null,
+) {
+  try {
+    const geo = await reverseGeocode(lat, lng)
+    return {
+      alamat: geo.alamat,
+      provinsi: geo.provinsi,
+      negara: geo.negara ?? fallbackNegaraFromWilayah(wilayahTipe),
+    }
+  } catch (err) {
+    console.error('Gagal reverse geocode tujuan BTO:', err)
+    return {
+      alamat: `${lat},${lng}`,
+      provinsi: null,
+      negara: fallbackNegaraFromWilayah(wilayahTipe),
+    }
+  }
+}
 
 // ─── Buat BTO baru (DRAFT) ───────────────────────────────────────────────────
 export async function createBtoService(
@@ -30,12 +58,16 @@ export async function createBtoService(
     wilayahTipe?: 'dalam_wilayah' | 'luar_wilayah' | 'luar_negeri' | null
   }
 ) {
+  const geo = await resolveTujuanGeo(data.tujuanLat, data.tujuanLng, data.wilayahTipe)
   const [inserted] = await db.insert(bto).values({
     employeeId,
     employeeNama,
     ...data,
     tujuanLat:    String(data.tujuanLat),
     tujuanLng:    String(data.tujuanLng),
+    tujuanAlamat: geo.alamat,
+    tujuanProvinsi: geo.provinsi ?? undefined,
+    tujuanNegara: geo.negara ?? undefined,
     jarakKm:      data.jarakKm ? String(data.jarakKm) : null,
     wilayahTipe:  data.wilayahTipe ?? null,
     status:       'DRAFT',
@@ -60,9 +92,36 @@ export async function updateBtoService(
     throw new AppError(`BTO dengan status ${existing.status} tidak bisa diubah`, 400)
   }
 
+  const coordsChanged = data.tujuanLat !== undefined || data.tujuanLng !== undefined
+  if (coordsChanged || data.wilayahTipe !== undefined) {
+    const lat = Number(data.tujuanLat ?? existing.tujuanLat)
+    const lng = Number(data.tujuanLng ?? existing.tujuanLng)
+    const wilayahTipe = (data.wilayahTipe ?? existing.wilayahTipe) as 'dalam_wilayah' | 'luar_wilayah' | 'luar_negeri' | null
+    const geo = await resolveTujuanGeo(lat, lng, wilayahTipe)
+    data.tujuanAlamat = geo.alamat
+    data.tujuanProvinsi = geo.provinsi ?? (coordsChanged ? null : existing.tujuanProvinsi)
+    data.tujuanNegara = geo.negara ?? (coordsChanged ? null : existing.tujuanNegara)
+  }
+
   const [updated] = await db.update(bto).set({ ...data, updatedAt: new Date() })
     .where(eq(bto.id, id)).returning()
   return updated
+}
+
+// ─── Hapus BTO (DRAFT saja) ──────────────────────────────────────────────────
+export async function deleteBtoService(id: string, employeeId: string, isAdmin: boolean) {
+  const [existing] = await db.select().from(bto).where(eq(bto.id, id)).limit(1)
+  if (!existing) throw new AppError('BTO tidak ditemukan', 404)
+
+  if (!isAdmin && existing.employeeId !== employeeId) {
+    throw new AppError('Tidak diizinkan menghapus BTO ini', 403)
+  }
+  if (!isAdmin && existing.status !== 'DRAFT' && existing.status !== 'REVISION_DP') {
+    throw new AppError(`BTO dengan status ${existing.status} tidak bisa dihapus`, 400)
+  }
+
+  await db.delete(bto).where(eq(bto.id, id))
+  return { id, success: true }
 }
 
 // ─── Submit BTO ───────────────────────────────────────────────────────────────
@@ -119,10 +178,11 @@ export async function submitBtoService(id: string, actor: { id: string; nama: st
     }
   }
 
+  const tujuanNegara = geo.negara ?? fallbackNegaraFromWilayah(existing.wilayahTipe)
   const wilayah = existing.wilayahTipe || getWilayahTipe(
     userProvinsi,
     geo.provinsi,
-    geo.negara,
+    tujuanNegara,
   )
 
   // Hitung jarak dari penempatan ke tujuan
@@ -197,7 +257,7 @@ export async function submitBtoService(id: string, actor: { id: string; nama: st
     wilayahTipe:   wilayah,
     tujuanAlamat:  geo.alamat,
     tujuanProvinsi: geo.provinsi ?? undefined,
-    tujuanNegara:  geo.negara   ?? undefined,
+    tujuanNegara:  tujuanNegara ?? undefined,
     jarakKm:       jarakKm ? String(jarakKm.toFixed(2)) : undefined,
     transportLabel,
     updatedAt:     now,
@@ -328,13 +388,15 @@ async function logApproval(data: {
 }
 
 // ─── List BTO Approvals ───────────────────────────────────────────────────────
-export async function listBtoApprovalsService(actor: { id: string; role: string }) {
-  const roleConditions = []
+export async function listBtoApprovalsService(actor: { id: string; employeeId?: string | null; role: string }, all: boolean = true) {
+  const roleConditions: any[] = []
+  const actorIdentifiers = [actor.id, actor.employeeId].filter((id): id is string => Boolean(id))
 
-  if (['super_admin', 'admin'].includes(actor.role)) {
+  if (all && ['super_admin', 'admin'].includes(actor.role)) {
     roleConditions.push(
       eq(bto.status, 'ADMIN_DP_REVIEW'),
-      eq(bto.status, 'SPDK_DRAFT')
+      eq(bto.status, 'SPDK_DRAFT'),
+      eq(bto.status, 'KABAG_REVIEW')
     )
   }
 
@@ -344,8 +406,56 @@ export async function listBtoApprovalsService(actor: { id: string; role: string 
     )
   }
 
+  // Find BTOs where actor is the assigned Kabag in active SPDKs with status KABAG_REVIEW
+  const kabagSpdks = await db.select({ btoId: spdk.btoId, spdkId: spdk.id, approverKabagId: spdk.approverKabagId })
+    .from(spdk)
+    .where(eq(spdk.status, 'KABAG_REVIEW'))
+
+  // Self-heal: SPDKs with null approverKabagId (created before the bug was fixed)
+  // Try to resolve and patch them now
   const [cfg] = await db.select().from(configApproverSpdk).where(eq(configApproverSpdk.isActive, true)).limit(1)
-  if (cfg && cfg.fixedEmployeeId === actor.id) {
+  for (const s of kabagSpdks) {
+    if (s.approverKabagId !== null) continue
+    // SPDK with no assigned kabag — try resolving now
+    try {
+      const [btoRow] = await db.select().from(bto).where(eq(bto.id, s.btoId)).limit(1)
+      if (!btoRow) continue
+
+      const resolvedKabag = await resolveSpdkApproverKabag(btoRow, cfg)
+      const resolvedKabagId = resolvedKabag.id
+
+      if (resolvedKabagId) {
+        // Patch the SPDK row with the resolved kabag id
+        await db.update(spdk).set({
+          approverKabagId: resolvedKabagId,
+          approverKabagNama: resolvedKabag.nama ?? undefined,
+        }).where(eq(spdk.id, s.spdkId))
+        s.approverKabagId = resolvedKabagId
+      } else if (cfg?.fixedEmployeeId) {
+        // Last resort: use fixed person from config
+        await db.update(spdk).set({ approverKabagId: cfg.fixedEmployeeId }).where(eq(spdk.id, s.spdkId))
+        s.approverKabagId = cfg.fixedEmployeeId
+      }
+    } catch (err) {
+      console.error('Self-heal approverKabagId failed for SPDK', s.spdkId, err)
+    }
+  }
+
+  // Now collect BTO IDs where actor is the Kabag
+  const kabagBtoIds = kabagSpdks
+    .filter(s => s.approverKabagId != null && actorIdentifiers.includes(s.approverKabagId))
+    .map(s => s.btoId)
+
+  if (kabagBtoIds.length > 0) {
+    roleConditions.push(
+      and(
+        eq(bto.status, 'KABAG_REVIEW'),
+        inArray(bto.id, kabagBtoIds)
+      )
+    )
+  }
+
+  if (cfg?.fixedEmployeeId && actorIdentifiers.includes(cfg.fixedEmployeeId)) {
     roleConditions.push(
       eq(bto.status, 'KABAG_REVIEW')
     )

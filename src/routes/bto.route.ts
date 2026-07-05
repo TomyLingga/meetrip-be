@@ -86,10 +86,14 @@ export default async function btoRoutes(fastify: FastifyInstance) {
 
   /** GET /api/bto/approvals — List BTO waiting for actor's approval */
   fastify.get('/approvals', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const q = req.query as { all?: string }
+    const isAll = q.all !== 'false'
+
     const result = await listBtoApprovalsService({
       id: req.user.sub,
+      employeeId: req.user.employeeId,
       role: req.user.role ?? 'user'
-    })
+    }, isAll)
     return reply.send(ok(result))
   })
 
