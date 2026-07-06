@@ -1,315 +1,458 @@
-export function spdkPrintTemplate(data: any) {
+export function spdkPrintTemplate(
+  btoRow: any,
+  owner: any,
+  spdkRow: any,
+  logs: any[],
+  stamp: any,
+  LOGO_SRC: string,
+  esc: (val: any) => string,
+  dateText: (date: any) => string,
+  durationDays: (d1: any, d2: any) => number,
+  kabagQr?: string | null
+) {
+  const signatureMark = kabagQr
+    ? `<img src="${kabagQr}" class="signature-qr" />`
+    : `<div class="signature-check">&#10003;</div>`;
+
   return `
 <!DOCTYPE html>
 <html>
 <head>
-        <title>Surat Pengajuan</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Surat Perintah Perjalanan Dinas Karyawan (SPDK)</title>
+        <style type="text/css">
+                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+                @page { size: A4 portrait; margin: 15mm 15mm 30mm; }
+                * { box-sizing: border-box; }
+                body {
+                        font-family: Arial, Helvetica, sans-serif;
+                        font-size: 13px;
+                        line-height: 1.32;
+                        color: black;
+                        margin: 0;
+                        padding-bottom: 95px;
+                }
+                @media screen {
+                        body {
+                                margin: 40px auto;
+                                max-width: 210mm;
+                                padding: 15mm 15mm 110px;
+                                background: white;
+                                box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+                                border: 1px solid #ddd;
+                                position: relative;
+                        }
+                        html {
+                                background: #f3f4f6;
+                        }
+                        .no-print {
+                                max-width: 210mm;
+                                margin: 0 auto 15px;
+                        }
+                        .address-footer {
+                                position: absolute;
+                                bottom: 15px;
+                                left: 15mm;
+                                right: 15mm;
+                        }
+                }
+                table { border-collapse: collapse; table-layout: fixed; }
+                td { overflow-wrap: anywhere; vertical-align: top; }
+                .bold { font-weight: bold; }
+                /* Document Header Table */
+                .header-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                        margin-bottom: 12px;
+                }
+                .header-table td, .header-table th {
+                        border: 1px solid #000;
+                        padding: 8px;
+                        vertical-align: middle;
+                        box-sizing: border-box;
+                }
+                .logo-cell {
+                        width: 15%;
+                        text-align: center;
+                        padding: 5px !important;
+                }
+                .logo-img {
+                        display: block;
+                        margin: 0 auto;
+                        max-width: 100%;
+                        height: auto;
+                        object-fit: contain;
+                }
+                .company-cell {
+                        width: 50%;
+                        text-align: center;
+                }
+                .company-title {
+                        font-size: 14px;
+                        font-weight: 800;
+                        color: #000;
+                        letter-spacing: 0.5px;
+                        text-transform: uppercase;
+                }
+                .company-subtitle {
+                        font-size: 10px;
+                        color: #000;
+                        font-weight: 700;
+                        margin-top: 2px;
+                        text-transform: uppercase;
+                }
+                .company-address {
+                        font-size: 8px;
+                        color: #000;
+                        margin-top: 4px;
+                        line-height: 1.3;
+                        font-weight: 500;
+                }
+                .meta-title-cell {
+                        width: 17.5%;
+                        font-weight: 700;
+                        font-size: 9.5px;
+                        text-transform: uppercase;
+                        color: #000;
+                        text-align: center;
+                }
+                .meta-value-cell {
+                        width: 17.5%;
+                        font-size: 10px;
+                        text-align: center;
+                        font-weight: 600;
+                        color: #000;
+                }
+                .doc-title-cell {
+                        font-size: 11px;
+                        font-weight: 800;
+                        color: #000;
+                        text-align: center;
+                        letter-spacing: 0.5px;
+                        text-transform: uppercase;
+                }
+                .text-center {
+                        text-align: center;
+                }
+                .content-table {
+                        width: 100%;
+                        margin-bottom: 24px;
+                }
+                .content-table td {
+                        padding: 2px 0;
+                }
+                .sizing-row td {
+                        height: 0 !important;
+                        padding: 0 !important;
+                        border: 0 !important;
+                        line-height: 0 !important;
+                        font-size: 0 !important;
+                }
+                .number-col { width: 5%; }
+                .subnumber-col { width: 5%; }
+                .label-col { width: 24%; }
+                .value-col { width: 66%; }
+                .bullet-table {
+                        width: 100%;
+                }
+                .bullet-table td {
+                        padding: 3px 0;
+                }
+                .footer-table {
+                        width: 100%;
+                        margin-top: 18px;
+                }
+                .stempel-box {
+                        width: 320px;
+                        height: 170px;
+                        border: 1px solid #555;
+                        position: relative;
+                }
+                .stempel-label {
+                        position: absolute;
+                        bottom: 24px;
+                        left: 0;
+                        right: 0;
+                        text-align: center;
+                        font-size: 13px;
+                        font-weight: 800;
+                        font-style: italic;
+                        text-decoration: underline;
+                }
+                .issued-table {
+                        width: 100%;
+                        font-size: 13px;
+                }
+                .issued-table td {
+                        padding: 2px 0;
+                }
+                .signature-area {
+                        text-align: center;
+                        margin-top: 34px;
+                }
+                .signature-box {
+                        height: 76px;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                }
+                .signature-qr {
+                        width: 72px;
+                        height: 72px;
+                        object-fit: contain;
+                }
+                .signature-check {
+                        font-size: 74px;
+                        line-height: 1;
+                        font-weight: 900;
+                }
+                .signature-name {
+                        font-size: 14px;
+                        font-weight: 800;
+                        text-decoration: underline;
+                }
+                .copy-row {
+                        margin-top: 42px;
+                        font-size: 13px;
+                }
+                .address-footer {
+                        margin-top: 60px;
+                        font-family: "Times New Roman", Times, serif;
+                        font-size: 12px;
+                        line-height: 1.15;
+                        color: #555;
+                }
+                .address-footer .orange {
+                        color: #d97706;
+                        font-weight: bold;
+                        font-size: 15px;
+                }
+                .address-footer table {
+                        width: 100%;
+                }
+                .address-footer td {
+                        width: 33.33%;
+                        vertical-align: bottom;
+                }
+                .address-footer .center {
+                        text-align: center;
+                        color: #d97706;
+                        font-weight: bold;
+                        font-size: 15px;
+                }
+                .address-footer .right {
+                        text-align: right;
+                }
+                .no-print { margin: 0 auto 15px; text-align: right; }
+                .no-print button { padding: 8px 12px; border: 1px solid #0f766e; border-radius: 4px; background: #0f766e; color: white; font-weight: 700; cursor: pointer; }
+                @media print {
+                        .no-print { display: none; }
+                        body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+                }
+        </style>
 </head>
-<style type="text/css">
-        .under{
-                text-decoration: underline;
-        }
-        .font{
-                font-family:sans-serif;
-                font-size: 12.5px;
-                color: black;
-        }
-        .bold{
-                font-weight: bold;
-        }
-</style>
-<body style="margin: -15px -26px 0px 0px;">
-        <div class="mb-5">
-                <table width="100%">
-                        <tr>
-                                <td align="right">
-                                        <img src="storage/upload/surat/inl2.png" width="165">
-                                </td>
-                        </tr>
-                </table>
-        </div>
-        <br>
-        <br>
-        <div class="mt-5" style="text-align: center;">
-                <strong class="under font bold">SURAT PERINTAH PERJALANAN DINAS KARYAWAN</strong>
-                <p class="font bold" style="margin:1.5; padding:1;">Nomor :{{$form->nomor_surat}}</p>
-        </div>
-        <br>
-        <div class="">
-                <table width="100%">
-                        <tr class="font bold">
-                                <td width="10%"></td>
-                                <td width="5%">I.</td>
-                                <td width="85%">Diberikan Kepada : </td>
-                        </tr>
-                </table>
-        </div>
-        <?php
-        $bln = array(1=>'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember');
-        ?>
-        <div class="mb-4">
-                <table width="100%">
-                        <tr class="font">
-                                <td width="15%"></td>
-                                <td width="5%">1.</td>
-                                <td width="20%">Nama </td>
-                                <td width="60%">: {{$form->nama_pelaksana}}</td>
-                        </tr>
-                        @if($form->jabatan == 'Direktur Utama')
-                        <tr class="font">
-                                <td width="15%"></td>
-                                <td width="5%">2.</td>
-                                <td width="20%">Pangkat/Jabatan </td>
-                                <td width="60%">: Direktur</td>
-                        </tr>
-                        @elseif($form->jabatan == 'General Manager')
-                        <tr class="font">
-                                <td width="15%"></td>
-                                <td width="5%">2.</td>
-                                <td width="20%">Pangkat/Jabatan </td>
-                                <td width="60%">: {{$form->jabatan}} {{$form->divisi}}</td>
-                        </tr>
-                        @else
-                        <tr class="font">
-                                <td width="15%"></td>
-                                <td width="5%">2.</td>
-                                <td width="20%">Pangkat/Jabatan </td>
-                                <td width="60%">: {{$form->jabatan}}</td>
-                        </tr>
-                        @endif
-                        <tr class="font">
-                                <td width="15%"></td>
-                                <td width="5%">3.</td>
-                                <td width="20%">Golongan </td>
-                                <td width="60%">: - </td>
-                        </tr>
-                        <tr class="font">
-                                <td width="15%"></td>
-                                <td width="5%">4.</td>
-                                <td width="20%">Untuk bertugas ke </td>
-                                <td width="60%">: {{$form->tujuan}}</td>
-                        </tr>
-                        <tr class="font">
-                                <td width="15%"></td>
-                                <td width="5%">5.</td>
-                                <td width="20%">Keperluan/Urusan </td>
-                                <td width="60%">: {{$form->keperluan}}</td>
-                        </tr>
-                        <tr class="font">
-                                <td width="15%"></td>
-                                <td width="5%">6.</td>
-                                <td width="20%">Berangkat tanggal </td>
-                                <td width="60%">: <?=date('j',strtotime($form->tgl_berangkat)).' '.$bln[date('n',strtotime($form->tgl_berangkat))].' '.date('Y',strtotime($form->tgl_berangkat));?></td>
-                        </tr>
-                        <tr class="font">
-                                <td width="15%"></td>
-                                <td width="5%">7.</td>
-                                <td width="20%">Kembali tanggal </td>
-                                <td width="60%">: <?=date('j',strtotime($form->tgl_kembali)).' '.$bln[date('n',strtotime($form->tgl_kembali))].' '.date('Y',strtotime($form->tgl_kembali));?></td>
-                        </tr>
-                        <tr class="font">
-                                <td width="15%"></td>
-                                <td width="5%">8.</td>
-                                <td width="20%">Barang yang dibawa </td>
-                                <td width="60%">: {{$form->barang}}</td>
-                        </tr>
-                        <tr class="font">
-                                <td width="15%"></td>
-                                <td width="5%">9.</td>
-                                <td width="20%">Kendaraan </td>
-                                @if ($form->kendaraan == "Kendaraan Dinas")
-                                <td width="60%">: Kendaraan Dinas {{$form->no_kendaraan}}</td>
-                                @else
-                                <td width="60%">: {{$form->kendaraan}}</td>
-                                @endif
-                        </tr>
-                        <tr class="font">
-                                <td width="15%"></td>
-                                <td width="5%">10.</td>
-                                <td width="20%">Rombongan </td>
-                                <td width="60%">: {{$form->nama_supir}}</td>
-                        </tr>
-                </table>
-        </div>
-        <br>
-        <div class="">
-                <table width="100%">
-                        <tr class="font bold">
-                                <td width="10%"></td>
-                                <td width="5%">II.</td>
-                                <td width="85%">Catatan : </td>
-                        </tr>
-                </table>
-        </div>
-        <div class="mb-4">
-                <table width="100%">
-                        <tr class="font">
-                                <td width="15%"></td>
-                                <td width="5%">-</td>
-                                <td width="80%">Biaya ditanggung oleh : PT. Industri Nabati Lestari </td>
-                        </tr>
-                        <tr class="font">
-                                <td width="15%"></td>
-                                <td width="5%">-</td>
-                                <td width="80%">Tanggal kembali dari perjalanan harap dilaporan kepada PT. Industri Nabati Lestari </td>
-                        </tr>
-                        <tr class="font">
-                                <td width="15%"></td>
-                                <td width="5%">-</td>
-                                <td width="80%">Mohon agar pihak berwajib memberikan bantuan seperlunya. </td>
-                        </tr>
-                </table>
-        </div>
-        <br>
-        <?php
+<body>
+        <div class="no-print"><button onclick="window.print()">Cetak / Simpan PDF</button></div>
 
-        $bulan = date('n',strtotime($form->tgl_surat));
-        $tgl = date('j',strtotime($form->tgl_surat));
-        $thn = date('Y',strtotime($form->tgl_surat));
-        $tgl_surat = $tgl.' '.$bln[$bulan].' '.$thn;
-        ?>
+        <table class="header-table">
+                <thead>
+                        <tr class="text-center">
+                                <td class="logo-cell" rowspan="4">
+                                        <img src="${LOGO_SRC}" alt="Logo INL" class="logo-img" width="83">
+                                </td>
+                                <td class="company-cell" rowspan="3">
+                                        <div class="company-title">PT. Industri Nabati Lestari</div>
+                                        <div class="company-subtitle">Pabrik Minyak Goreng</div>
+                                        <div class="company-address">
+                                                Komp. KEK Sei Mangkei, Kav. 2-3, Kec. Bosar Maligas, Kab. Simalungun, Sumatera Utara, 21184
+                                        </div>
+                                </td>
+                                <th class="meta-title-cell">No. Dokumen</th>
+                                <th class="meta-title-cell">Tgl. Berlaku</th>
+                        </tr>
+                        <tr class="text-center">
+                                <td class="meta-value-cell">INLHO/HRD-F/015</td>
+                                <td class="meta-value-cell">12-Nov-18</td>
+                        </tr>
+                        <tr class="text-center">
+                                <th class="meta-title-cell">No. Revisi</th>
+                                <th class="meta-title-cell">Halaman</th>
+                        </tr>
+                        <tr class="text-center">
+                                <th class="doc-title-cell">SURAT PERINTAH PERJALANAN DINAS KARYAWAN</th>
+                                <td class="meta-value-cell">00</td>
+                                <td class="meta-value-cell">1 dari 1</td>
+                        </tr>
+                </thead>
+        </table>
 
-<div class="mt-4 mb-4">
-                <table width="100%" border="0" cellspacing="0" cellpadding="0">
-                        <tr class="font">
-                                <td width="10%"></td>
-                                <td width="35%" style="border-top: 1px solid; border-right: 1px solid; border-left: 1px solid;"></td>
-                                <td width="10%"></td>
-                                <td width="35%">
-                                        <table width="100%">
-                                                <tr>
-                                                        <td width="35%" style="height: 5px;">Dikeluarkan di</td>
-                                                        <td width="5%" style="height: 5px;">:</td>
-                                                        <td width="60%" style="height: 5px;">Sei Mangkei</td>
-                                                </tr>
-                                                <tr>
-                                                        <td width="35%" style="height: 5px;">Pada tanggal</td>
-                                                        <td width="5%" style="height: 5px;">:</td>
-                                                        <td width="60%" style="height: 5px;"><?=$tgl_surat;?></td>
-                                                </tr>
-                                        </table>
-                                </td>
-                                <td width="10%"></td>
-                        </tr>
-                        <tr class="font">
-                                <td width="10%"></td>
-                                <td width="35%" style="border-right: 1px solid; border-left: 1px solid;"></td>
-                                <td width="10%"></td>
-                                <td width="35%" style="height: 5px;" class="bold">PT. Industri Nabati Lestari</td>
-                                <td width="10%"></td>
-                        </tr>
-                        <tr class="font">
-                                <td width="10%"></td>
-                                <td width="35%" style="border-right: 1px solid; border-left: 1px solid;"></td>
-                                <td width="10%"></td>
-                                <td width="35%" style="height: 5px;"> </td>
-                                <td width="10%"></td>
-                        </tr>
-                        <tr class="font" align="center">
-                                <td width="10%" style="height: 120px;"></td>
-                                <td width="35%" style="border-right: 1px solid !important; border-left: 1px solid !important; height: 120px; vertical-align: bottom;">
-                                        <table width="100%">
-                                                <tr>
-                                                        <td width="10%"></td>
-                                                        <td width="80%" style="font-size: 10.5px; font-style: italic; text-align: center;" class="bold under">Stempel & Tanda Tangan Instansi atau Lembaga Tujuan</td>
-                                                        <td width="10%"></td>
-                                                </tr>
-                                        </table>
-                                </td>
-                                <td width="10%" style="height: 120px;"></td>
-                                <td width="35%" style="height: 120px; vertical-align: bottom;">
-                                        <table width="100%">
-                                                @if ($form->status >= 6)
-                                                <tr>
-                                                        <td width="10%"></td>
-                                                        <td width="60%" style="text-align:center; margin:0; padding:0;"><img src="storage/upload/ttd/{{$user->signature}}" width="100"></td>
-                                                        <td width="30%"></td>
-                                                </tr>
-                                                @endif
-                                                <tr>
-                                                        <td width="10%"></td>
-                                                        <td width="60%" class="under bold" style="text-align:center; margin:0; padding:0;">{{$user->name}}</td>
-                                                        <td width="30%"></td>
-                                                </tr>
-                                        </table>
-                                </td>
-                                <td width="10%" style="height: 120px;"></td>
-                        </tr>
-                        @if($user->grade == '6')
-                        <tr class="font">
-                                <td width="10%"></td>
-                                <td width="35%" style="border-right: 1px solid; border-left: 1px solid; border-bottom: 1px solid;"></td>
-                                <td width="10%"></td>
-                                <td width="35%">
-                                        <table width="100%">
-                                                <tr>
-                                                        <td width="10%"></td>
-                                                        <td width="60%" style="text-align:center;margin:0; padding:0;">Direktur</td>
-                                                        <td width="30%"></td>
-                                                </tr>
-                                        </table>
-                                </td>
-                                <td width="10%"></td>
-                        </tr>
-                        @elseif($user->grade == '5')
-                        <tr class="font">
-                                <td width="10%"></td>
-                                <td width="35%" style="border-right: 1px solid; border-left: 1px solid; border-bottom: 1px solid;"></td>
-                                <td width="10%"></td>
-                                <td width="35%">
-                                <table width="100%">
-                                                <tr>
-                                                        <td width="10%"></td>
-                                                        <td width="60%" style="text-align:center;margin:0; padding:0;">Kabag {{$user->departemen}}</td>
-                                                        <td width="30%"></td>
-                                                </tr>
-                                        </table>
-                                </td>
-                                <td width="10%"></td>
-                        </tr>
-                        @else
-                        <tr class="font">
-                                <td width="10%"></td>
-                                <td width="35%" style="border-right: 1px solid; border-left: 1px solid; border-bottom: 1px solid;"></td>
-                                <td width="10%"></td>
-                                <td width="35%">
-                                <table width="100%">
-                                                <tr>
-                                                        <td width="10%"></td>
-                                                        <td width="60%" style="text-align:center;margin:0; padding:0;">{{$user->jabatan}}</td>
-                                                        <td width="30%"></td>
-                                                </tr>
-                                        </table>
-                                </td>
-                                <td width="10%"></td>
-                        </tr>
-                        @endif
-                </table>
-        </div>
-        <br><br><br>
-        <div class="mt-5">
-                <table width="100%">
-                        <tr class="font">
-                                <td width="10%"></td>
-                                <td width="10%">Asli</td>
-                                <td width="35%">: Bagian Keuangan & Akuntansi</td>
-                                <td width="35%"></td>
-                                <td width="10%"></td>
-                        </tr>
-                </table>
+        <div style="text-align: center; margin-top: 14px; margin-bottom: 20px; font-weight: bold; font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #000; text-transform: uppercase;">
+                Nomor: ${esc(spdkRow.nomorSpdk)}
         </div>
 
-        <div style="position: fixed; bottom: 20px; left: -25px; right: 0px; height: 50px;">
-                <table width="100%">
+        <table class="content-table">
+                <colgroup>
+                        <col style="width: 5%;">
+                        <col style="width: 5%;">
+                        <col style="width: 23%;">
+                        <col style="width: 67%;">
+                </colgroup>
+                <tr class="sizing-row"><td></td><td></td><td></td><td></td></tr>
+                <tr class="bold">
+                        <td class="number-col">I.</td>
+                        <td colspan="3">Diberikan Kepada :</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td class="subnumber-col">1.</td>
+                        <td class="label-col">Nama</td>
+                        <td class="value-col">: ${esc(btoRow.employeeNama ?? owner?.nama)}</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td>2.</td>
+                        <td>Pangkat/Jabatan</td>
+                        <td>: ${esc(owner?.gradeKode ?? '-')}</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td>3.</td>
+                        <td>Golongan</td>
+                        <td>: -</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td>4.</td>
+                        <td>Untuk bertugas ke</td>
+                        <td>: ${esc(btoRow.tujuanNama)}</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td>5.</td>
+                        <td>Keperluan/Urusan</td>
+                        <td>: ${esc(btoRow.kepentingan)}</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td>6.</td>
+                        <td>Berangkat tanggal</td>
+                        <td>: ${dateText(btoRow.estBerangkat)}</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td>7.</td>
+                        <td>Kembali tanggal</td>
+                        <td>: ${dateText(btoRow.estKembali)}</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td>8.</td>
+                        <td>Barang yang dibawa</td>
+                        <td>: ${esc(btoRow.barang || '-')}</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td>9.</td>
+                        <td>Kendaraan</td>
+                        <td>: ${esc(btoRow.transportLabel || '-')} -</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td>10.</td>
+                        <td>Rombongan</td>
+                        <td>: -</td>
+                </tr>
+        </table>
+
+        <table class="content-table">
+                <colgroup>
+                        <col style="width: 5%;">
+                        <col style="width: 5%;">
+                        <col style="width: 23%;">
+                        <col style="width: 67%;">
+                </colgroup>
+                <tr class="sizing-row"><td></td><td></td><td></td><td></td></tr>
+                <tr class="bold">
+                        <td class="number-col">II.</td>
+                        <td colspan="3">Catatan :</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td colspan="3">
+                                <table class="bullet-table">
+                                        <tr><td class="subnumber-col">-</td><td>Biaya ditanggung oleh : PT. Industri Nabati Lestari</td></tr>
+                                        <tr><td>-</td><td>Tanggal kembali dari perjalanan harap dilaporan kepada PT. Industri Nabati Lestari</td></tr>
+                                        <tr><td>-</td><td>Mohon agar pihak berwajib memberikan bantuan seperlunya.</td></tr>
+                                </table>
+                        </td>
+                </tr>
+        </table>
+
+        <table class="footer-table">
+                <tr>
+                        <td width="45%">
+                                <div class="stempel-box">
+                                        <div class="stempel-label">Stempel Instansi atau Lembaga Tujuan</div>
+                                </div>
+                        </td>
+                        <td width="10%"></td>
+                        <td width="45%">
+                                <table class="issued-table">
+                                        <tr>
+                                                <td width="38%">Dikeluarkan di</td>
+                                                <td width="4%">:</td>
+                                                <td>Sei Mangkei</td>
+                                        </tr>
+                                        <tr>
+                                                <td>Pada tanggal</td>
+                                                <td>:</td>
+                                                <td>${dateText(spdkRow.createdAt || new Date())}</td>
+                                        </tr>
+                                        <tr>
+                                                <td colspan="3" class="bold">PT. Industri Nabati Lestari</td>
+                                        </tr>
+                                </table>
+                                <div class="signature-area">
+                                        <div class="signature-box">${signatureMark}</div>
+                                        <div class="signature-name">${esc(spdkRow.approverKabagNama || 'Ferdiansyah')}</div>
+                                        <div>Kabag SDM &amp; Sistem</div>
+                                </div>
+                        </td>
+                </tr>
+        </table>
+
+        <div class="copy-row"><strong>Asli</strong> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; : Bagian Finance</div>
+
+        <div class="address-footer">
+                <table>
                         <tr>
                                 <td>
-                                        <img src="storage/upload/surat/footer.PNG" width="760">
-
+                                        <div class="orange">Factory &amp; Main Office:</div>
+                                        Special Economic Zone - Sei Mangkei<br>
+                                        Jl. Kelapa Sawit II Kav. 2-3<br>
+                                        Kec. Bosar Maligas, Simalungun 21184<br>
+                                        North Sumatera - Indonesia<br>
+                                        P: +62 622 7297 252 &nbsp; F: +62 622 7297 255<br>
+                                        E: cs@inl.co.id
+                                </td>
+                                <td class="center">www.inl.co.id</td>
+                                <td class="right">
+                                        <div class="orange">Representative &amp; Marketing Office:</div>
+                                        Jl. Iskandar Muda No. 115<br>
+                                        Medan 20119<br>
+                                        North Sumatra - Indonesia<br>
+                                        P: +62 61 4521 668
                                 </td>
                         </tr>
                 </table>
         </div>
+        <script type="text/javascript">
+          window.addEventListener('load', () => {
+            setTimeout(() => {
+              window.print();
+            }, 500);
+          });
+        </script>
 </body>
 </html>
 `;

@@ -33,13 +33,23 @@ interface PortalVerifyResponse {
   data: PortalUser
 }
 
+// Helper: Normalisasi string role → selalu comma-separated, trim spasi
+// Contoh: "admin sdm" → "admin,sdm", "admin , sdm" → "admin,sdm"
+function normalizeRole(role: string): string {
+  return role
+    .split(/[\s,]+/)        // split by whitespace atau comma
+    .map(r => r.trim())
+    .filter(Boolean)
+    .join(',')
+}
+
 // Helper: Tentukan role spesifik MeeTrip
 // HANYA dari tabel meetrip_user_role. Jika tidak ada record → default 'user'.
 async function getMeeTripRole(portalUserId: string): Promise<string> {
   const customRole = await db.query.meetripUserRole.findFirst({
     where: eq(meetripUserRole.portalUserId, portalUserId),
   })
-  return customRole ? customRole.role : 'user'
+  return customRole ? normalizeRole(customRole.role) : 'user'
 }
 
 // ─── Verifikasi SSO Token ke portal ──────────────────────────────────────────

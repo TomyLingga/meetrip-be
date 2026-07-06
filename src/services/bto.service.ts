@@ -1,14 +1,14 @@
 // ─── BTO Service ──────────────────────────────────────────────────────────────
 // State machine BTO: Create, Submit, Approval flow
 import { db }        from '../db/connection'
-import { bto, btoApprovalLog, dp, localUserCache, configPemberiTugas, configApproverSpdk, refTransport, spdk } from '../db/schema'
+import { bto, btoApprovalLog, dp, dpApprovalLog, localUserCache, configPemberiTugas, refTransport, spdk } from '../db/schema'
 import { eq, desc, and, gte, lte, like, or, sql, inArray } from 'drizzle-orm'
 import { AppError }  from '../utils/errorHandler'
 import { generateNomor } from '../utils/romanNumeral'
 import { reverseGeocode, getWilayahTipe, haversineKm } from './geocoding.service'
 import { config as appConfig } from '../config/env'
 import { getGradeIdByLevel, hitungDurasiHariMalam, validateRincianAgainstPagu } from './pagu.service'
-import { resolveSpdkApproverKabag } from './spdk.service'
+import { ensureApproverSpdkConfig, resolveSpdkApproverKabag } from './spdk.service'
 
 function fallbackNegaraFromWilayah(wilayahTipe?: 'dalam_wilayah' | 'luar_wilayah' | 'luar_negeri' | null) {
   if (!wilayahTipe || wilayahTipe === 'luar_negeri') return null
@@ -19,20 +19,26 @@ async function resolveTujuanGeo(
   lat: number,
   lng: number,
   wilayahTipe?: 'dalam_wilayah' | 'luar_wilayah' | 'luar_negeri' | null,
+  fallback?: {
+    alamat?: string | null
+    provinsi?: string | null
+    negara?: string | null
+    tujuanNama?: string | null
+  },
 ) {
   try {
     const geo = await reverseGeocode(lat, lng)
     return {
-      alamat: geo.alamat,
-      provinsi: geo.provinsi,
-      negara: geo.negara ?? fallbackNegaraFromWilayah(wilayahTipe),
+      alamat: geo.alamat || fallback?.alamat || fallback?.tujuanNama || '',
+      provinsi: geo.provinsi ?? fallback?.provinsi ?? null,
+      negara: geo.negara ?? fallback?.negara ?? fallbackNegaraFromWilayah(wilayahTipe),
     }
   } catch (err) {
     console.error('Gagal reverse geocode tujuan BTO:', err)
     return {
-      alamat: `${lat},${lng}`,
-      provinsi: null,
-      negara: fallbackNegaraFromWilayah(wilayahTipe),
+      alamat: fallback?.alamat || fallback?.tujuanNama || '',
+      provinsi: fallback?.provinsi ?? null,
+      negara: fallback?.negara ?? fallbackNegaraFromWilayah(wilayahTipe),
     }
   }
 }
@@ -56,16 +62,24 @@ export async function createBtoService(
     barang?: string | null
     jarakKm?: number | null
     wilayahTipe?: 'dalam_wilayah' | 'luar_wilayah' | 'luar_negeri' | null
+    tujuanAlamat?: string | null
+    tujuanProvinsi?: string | null
+    tujuanNegara?: string | null
   }
 ) {
-  const geo = await resolveTujuanGeo(data.tujuanLat, data.tujuanLng, data.wilayahTipe)
+  const geo = await resolveTujuanGeo(data.tujuanLat, data.tujuanLng, data.wilayahTipe, {
+    alamat: data.tujuanAlamat,
+    provinsi: data.tujuanProvinsi,
+    negara: data.tujuanNegara,
+    tujuanNama: data.tujuanNama,
+  })
   const [inserted] = await db.insert(bto).values({
     employeeId,
     employeeNama,
     ...data,
     tujuanLat:    String(data.tujuanLat),
     tujuanLng:    String(data.tujuanLng),
-    tujuanAlamat: geo.alamat,
+    tujuanAlamat: geo.alamat || data.tujuanNama,
     tujuanProvinsi: geo.provinsi ?? undefined,
     tujuanNegara: geo.negara ?? undefined,
     jarakKm:      data.jarakKm ? String(data.jarakKm) : null,
@@ -97,8 +111,13 @@ export async function updateBtoService(
     const lat = Number(data.tujuanLat ?? existing.tujuanLat)
     const lng = Number(data.tujuanLng ?? existing.tujuanLng)
     const wilayahTipe = (data.wilayahTipe ?? existing.wilayahTipe) as 'dalam_wilayah' | 'luar_wilayah' | 'luar_negeri' | null
-    const geo = await resolveTujuanGeo(lat, lng, wilayahTipe)
-    data.tujuanAlamat = geo.alamat
+    const geo = await resolveTujuanGeo(lat, lng, wilayahTipe, {
+      alamat: data.tujuanAlamat ?? existing.tujuanAlamat,
+      provinsi: data.tujuanProvinsi ?? existing.tujuanProvinsi,
+      negara: data.tujuanNegara ?? existing.tujuanNegara,
+      tujuanNama: data.tujuanNama ?? existing.tujuanNama,
+    })
+    data.tujuanAlamat = geo.alamat || data.tujuanNama || existing.tujuanNama
     data.tujuanProvinsi = geo.provinsi ?? (coordsChanged ? null : existing.tujuanProvinsi)
     data.tujuanNegara = geo.negara ?? (coordsChanged ? null : existing.tujuanNegara)
   }
@@ -137,7 +156,12 @@ export async function submitBtoService(id: string, actor: { id: string; nama: st
   }
 
   // Geocode tujuan → wilayah_tipe
-  const geo = await reverseGeocode(Number(existing.tujuanLat), Number(existing.tujuanLng))
+  const geo = await resolveTujuanGeo(Number(existing.tujuanLat), Number(existing.tujuanLng), existing.wilayahTipe, {
+    alamat: existing.tujuanAlamat,
+    provinsi: existing.tujuanProvinsi,
+    negara: existing.tujuanNegara,
+    tujuanNama: existing.tujuanNama,
+  })
 
   // Dapatkan penempatan area user
   const userCache = await db.query.localUserCache.findFirst({
@@ -255,7 +279,7 @@ export async function submitBtoService(id: string, actor: { id: string; nama: st
     sequence,
     submittedAt:   now,
     wilayahTipe:   wilayah,
-    tujuanAlamat:  geo.alamat,
+    tujuanAlamat:  geo.alamat || existing.tujuanNama,
     tujuanProvinsi: geo.provinsi ?? undefined,
     tujuanNegara:  tujuanNegara ?? undefined,
     jarakKm:       jarakKm ? String(jarakKm.toFixed(2)) : undefined,
@@ -264,11 +288,23 @@ export async function submitBtoService(id: string, actor: { id: string; nama: st
   }).where(eq(bto.id, id))
 
   if (existing.butuhDp) {
+    const dpRow = await db.query.dp.findFirst({ where: eq(dp.btoId, id) })
     await db.update(dp).set({
       status: 'ADMIN_REVIEW',
       submittedAt: now,
       updatedAt: now,
     }).where(eq(dp.btoId, id))
+
+    // Log DP submit ke dp_approval_log
+    if (dpRow) {
+      await db.insert(dpApprovalLog).values({
+        dpId: dpRow.id,
+        aksi: 'submit',
+        actorId: actor.id,
+        actorNama: actor.nama,
+        catatan: 'DP diajukan bersamaan dengan pengajuan BTO',
+      })
+    }
   }
 
   await logApproval({ btoId: id, tahap: 'user', aksi: 'submit', actorId: actor.id, actorNama: actor.nama, statusDari: existing.status, statusKe: nextStatus })
@@ -288,6 +324,19 @@ export async function adminApproveDpService(id: string, aksi: 'approve' | 'rejec
 
   await db.update(bto).set({ status: nextStatus, catatanAdmin: catatan, updatedAt: new Date() }).where(eq(bto.id, id))
   await db.update(dp).set({ status: dpStatusMap[aksi], updatedAt: new Date() }).where(eq(dp.btoId, id))
+
+  // Log DP approval ke dp_approval_log
+  const dpRow = await db.query.dp.findFirst({ where: eq(dp.btoId, id) })
+  if (dpRow) {
+    await db.insert(dpApprovalLog).values({
+      dpId: dpRow.id,
+      aksi,
+      actorId: actor.id,
+      actorNama: actor.nama,
+      catatan,
+    })
+  }
+
   await logApproval({ btoId: id, tahap: 'admin_dp', aksi, actorId: actor.id, actorNama: actor.nama, statusDari: existing.status, statusKe: nextStatus, catatan })
   return { status: nextStatus }
 }
@@ -346,7 +395,7 @@ export async function listBtoService(filters: {
       eq(bto.employeeId, filters.employeeId),
       eq(bto.pemberiTugasId, filters.employeeId)
     ]
-    if (filters.viewerRole === 'sdm') {
+    if (filters.viewerRole?.split(',').includes('sdm')) {
       userOrApproverConditions.push(eq(bto.status, 'SDM_REVIEW'))
     }
     conditions.push(or(...userOrApproverConditions))
@@ -392,7 +441,9 @@ export async function listBtoApprovalsService(actor: { id: string; employeeId?: 
   const roleConditions: any[] = []
   const actorIdentifiers = [actor.id, actor.employeeId].filter((id): id is string => Boolean(id))
 
-  if (all && ['super_admin', 'admin'].includes(actor.role)) {
+  const roles = (actor.role || 'user').split(',')
+
+  if (all && roles.some(r => ['super_admin', 'admin'].includes(r))) {
     roleConditions.push(
       eq(bto.status, 'ADMIN_DP_REVIEW'),
       eq(bto.status, 'SPDK_DRAFT'),
@@ -400,7 +451,8 @@ export async function listBtoApprovalsService(actor: { id: string; employeeId?: 
     )
   }
 
-  if (actor.role === 'sdm') {
+  // SDM_REVIEW hanya muncul di halaman sdm-review (all=true), tidak di my-approvals (all=false)
+  if (all && roles.includes('sdm')) {
     roleConditions.push(
       eq(bto.status, 'SDM_REVIEW')
     )
@@ -413,9 +465,9 @@ export async function listBtoApprovalsService(actor: { id: string; employeeId?: 
 
   // Self-heal: SPDKs with null approverKabagId (created before the bug was fixed)
   // Try to resolve and patch them now
-  const [cfg] = await db.select().from(configApproverSpdk).where(eq(configApproverSpdk.isActive, true)).limit(1)
+  const cfg = await ensureApproverSpdkConfig()
   for (const s of kabagSpdks) {
-    if (s.approverKabagId !== null) continue
+    if (s.approverKabagId) continue
     // SPDK with no assigned kabag — try resolving now
     try {
       const [btoRow] = await db.select().from(bto).where(eq(bto.id, s.btoId)).limit(1)

@@ -68,6 +68,7 @@ async function bootstrap() {
   await fastify.register(spdkRoutes, { prefix: '/api/spdk' });
   await fastify.register(bteRoutes, { prefix: '/api/bte' });
   await fastify.register(documentRoutes, { prefix: '/api/documents' });
+  await fastify.register(documentRoutes, { prefix: '/api/document' });
   await fastify.register(meetingRoutes, { prefix: '/api/meeting' });
   await fastify.register(dashboardRoutes, { prefix: '/api/dashboard' });
   await fastify.register(portalUserRoutes, { prefix: '/api/portal/users' });

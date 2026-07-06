@@ -30,3 +30,14 @@ export function generateNomor(
   const year  = submittedAt.getFullYear()
   return `${padSequence(sequence)}/${company}/${tipe}/${month}/${year}`
 }
+
+export function nomorSpdkFromBto(nomorBto?: string | null): string | null {
+  if (!nomorBto) return null
+
+  const parts = nomorBto.split('/').map((part) => part.trim()).filter(Boolean)
+  if (parts.length >= 5) {
+    return `${parts[0]}/${parts[1]}/SPDK/${parts[3]}/${parts[4]}`
+  }
+
+  return nomorBto.replace(/\/BTO\//i, '/SPDK/')
+}

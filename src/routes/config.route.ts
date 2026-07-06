@@ -23,7 +23,7 @@ const spdkConfigSchema = z.object({
 
 const userRoleSchema = z.object({
   portalUserId: z.string().min(1),
-  role: z.enum(['admin', 'sdm']),
+  role: z.string().min(1),
 });
 
 export default async function configRoutes(fastify: FastifyInstance) {

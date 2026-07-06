@@ -51,10 +51,11 @@ export async function createOrUpdateDpService(
     throw new AppError('DP hanya bisa diisi saat BTO berstatus DRAFT atau REVISION_DP', 400);
   }
 
-  // Find or create DP record
+  // Find or create DP record — track isNew before insert/update
   let dpRow = await db.query.dp.findFirst({
     where: eq(dp.btoId, btoId),
   });
+  const isNew = !dpRow;
 
   const exchangeRate = data.exchangeRateUsd || 1;
   let totalIdr = 0;
@@ -122,6 +123,16 @@ export async function createOrUpdateDpService(
       }))
     );
   }
+
+  // ─── Log ke dp_approval_log ──────────────────────────────────────────────────
+  const aksiLog = isNew ? 'create' : 'update';
+  await db.insert(dpApprovalLog).values({
+    dpId: dpRow.id,
+    aksi: aksiLog,
+    actorId: actor.id,
+    actorNama: actor.nama,
+    catatan: `Rincian DP di${aksiLog === 'update' ? 'perbarui' : 'simpan'} oleh ${actor.nama}`,
+  });
 
   return { dpId: dpRow.id, totalIdr, totalUsd };
 }

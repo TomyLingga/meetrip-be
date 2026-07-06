@@ -1,312 +1,343 @@
-export function btoPrintTemplate(btoRow: any, owner: any, pemberiTugasRow: any, sdmLog: any, sdmName: string, LOGO_SRC: string, esc: any, dateText: any, durationDays: any) {
+export function btoPrintTemplate(btoRow: any, owner: any, pemberiTugasRow: any, sdmLog: any, sdmName: string, LOGO_SRC: string, esc: any, dateText: any, durationDays: any, employeeQr?: string | null, ptQr?: string | null, sdmQr?: string | null) {
+  const signatureMark = (qr?: string | null) => qr
+    ? `<img src="${qr}" class="signature-qr" />`
+    : `<div class="signature-check">&#10003;</div>`;
+
   return `
 <!DOCTYPE html>
 <html>
 <head>
         <title>BTO</title>
+        <style type="text/css">
+                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+                @page { size: A4 portrait; margin: 15mm; }
+                * { box-sizing: border-box; }
+                body {
+                        font-family: "Times New Roman", Times, serif;
+                        font-size: 13px;
+                        line-height: 1.35;
+                        color: black;
+                        margin: 0;
+                }
+                @media screen {
+                        body {
+                                margin: 40px auto;
+                                max-width: 210mm;
+                                padding: 15mm;
+                                background: white;
+                                box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+                                border: 1px solid #ddd;
+                                position: relative;
+                        }
+                        html {
+                                background: #f3f4f6;
+                        }
+                        .no-print {
+                                max-width: 210mm;
+                                margin: 0 auto 10px;
+                        }
+                }
+                table { border-collapse: collapse; table-layout: fixed; }
+                td { overflow-wrap: anywhere; word-break: normal; }
+                .bold { font-weight: bold; }
+                /* Document Header Table */
+                .header-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                        margin-bottom: 12px;
+                }
+                .header-table td, .header-table th {
+                        border: 1px solid #000;
+                        padding: 8px;
+                        vertical-align: middle;
+                        box-sizing: border-box;
+                }
+                .logo-cell {
+                        width: 15%;
+                        text-align: center;
+                        padding: 5px !important;
+                }
+                .logo-img {
+                        display: block;
+                        margin: 0 auto;
+                        max-width: 100%;
+                        height: auto;
+                        object-fit: contain;
+                }
+                .company-cell {
+                        width: 50%;
+                        text-align: center;
+                }
+                .company-title {
+                        font-size: 14px;
+                        font-weight: 800;
+                        color: #000;
+                        letter-spacing: 0.5px;
+                        text-transform: uppercase;
+                }
+                .company-subtitle {
+                        font-size: 10px;
+                        color: #000;
+                        font-weight: 700;
+                        margin-top: 2px;
+                        text-transform: uppercase;
+                }
+                .company-address {
+                        font-size: 8px;
+                        color: #000;
+                        margin-top: 4px;
+                        line-height: 1.3;
+                        font-weight: 500;
+                }
+                .meta-title-cell {
+                        width: 17.5%;
+                        font-weight: 700;
+                        font-size: 9.5px;
+                        text-transform: uppercase;
+                        color: #000;
+                        text-align: center;
+                }
+                .meta-value-cell {
+                        width: 17.5%;
+                        font-size: 10px;
+                        text-align: center;
+                        font-weight: 600;
+                        color: #000;
+                }
+                .doc-title-cell {
+                        font-size: 11px;
+                        font-weight: 800;
+                        color: #000;
+                        text-align: center;
+                        letter-spacing: 0.5px;
+                        text-transform: uppercase;
+                }
+                .text-center {
+                        text-align: center;
+                }
+                .section-table {
+                        width: 100%;
+                        border: 1px solid black;
+                        margin-top: 8px;
+                }
+                .section-table td {
+                        padding: 7px 10px;
+                        vertical-align: top;
+                }
+                .sizing-row td {
+                        height: 0 !important;
+                        padding: 0 !important;
+                        border: 0 !important;
+                        line-height: 0 !important;
+                        font-size: 0 !important;
+                }
+                .label-cell { width: 20%; }
+                .colon-cell { width: 2%; text-align: center; }
+                .indent-cell { width: 8%; }
+                .detail-title {
+                        text-align: center;
+                        font-size: 18px;
+                        font-weight: bold;
+                        letter-spacing: .5px;
+                        padding-top: 10px !important;
+                        padding-bottom: 22px !important;
+                }
+                .signature-table {
+                        width: 100%;
+                        border: 1px solid black;
+                        margin-top: 8px;
+                }
+                .signature-table td {
+                        vertical-align: top;
+                        padding: 10px 16px;
+                }
+                .signature-date {
+                        font-size: 14px;
+                        padding-bottom: 22px !important;
+                }
+                .signature-cell {
+                        width: 33.33%;
+                        text-align: center;
+                        font-size: 13px;
+                        font-weight: bold;
+                }
+                .signature-box {
+                        height: 100px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                }
+                .signature-qr {
+                        width: 72px;
+                        height: 72px;
+                        object-fit: contain;
+                }
+                .signature-check {
+                        font-family: Arial, Helvetica, sans-serif;
+                        font-size: 86px;
+                        line-height: 1;
+                        font-weight: 900;
+                }
+                .signature-name {
+                        text-decoration: underline;
+                        margin-top: 4px;
+                }
+                .signature-position {
+                        margin-top: 2px;
+                }
+                .no-print { margin: 0 auto 10px; text-align: right; }
+                .no-print button { padding: 6px 10px; border: 1px solid #0f766e; border-radius: 4px; background: #0f766e; color: white; font-weight: 700; cursor: pointer; }
+                @media print {
+                        .no-print { display: none; }
+                        body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+                }
+        </style>
 </head>
-<style type="text/css">
-        .under{
-                text-decoration: underline;
-        }
-        .font{
-                font-family:sans-serif;
-                font-size: 14px;
-        text-decoration: underline;
-                color: black;
-        margin-top:0px;
-        }
-        .bold{
-                font-weight: bold;
-        }
-    .tbl{
-        border: 1px solid black;
-        width: 100%;
-    }
-    .tdr{
-        border: 1px;
-        border-color: black;
-        border-right-style: solid;
-    }
-    .tdl{
-        border: 1px;
-        border-color: black;
-        border-left-style: solid;
-    }
-    .tdl2{
-        border: 1px;
-        border-color: black;
-        border-left-style: solid;
-        border-top-style: solid;
-        margin-top: 2px;
-        /* text-align: center; */
-    }
-    .tdl3{
-                border: none;
-        /* text-align: center; */
-    }
-    .tbl2{
-        border: 4px;
-        width: 100%;
-        /* padding: 10px; */
-        border-style: solid;
-    }
-    .tbl3{
-        width: 99%;
-        /* padding: 11px; */
-        margin:7px;
-    }
-    .tr{
-        border: 2px;
-        width: 100%;
-        /* padding: 0; */
-        border-style: solid;
-        margin:2px;
-    }
-    .tr2{
-        border:1px;
-        border-style: solid;
-        padding: 5px;
-    }
-    .tx-center{
-        text-align:center;
-    }
-    .ft2{
-        font-size: 11px;
-        color: black;
-                font-family:sans-serif;
-        margin: 0;
-    }
-    .ft3{
-        font-family:sans-serif;
-                font-size: 13px;
-        /* text-decoration: underline; */
-                color: black;
-        /* margin-top:20px; */
-    }
-    .border{
-        border: 3px solid black;
-        /* width:100%; */
-    }
-    br {
-        display: block;
-        margin: 2 0;
-    }
-</style>
 <body>
-        <!-- <div> -->
-                <table class="tbl" cellspacing="0" cellpadding="0">
-                        <tr>
-                                <td class="tdr tx-center" width="13%">
-                                        <img src="${LOGO_SRC}" style="margin-top:25;" width="85">
-                                </td>
-                <td class="tx-center" width="">
-                    <b class="font">PT. INDUSTRI NABATI LESTARI</b>
-                    <p class="ft2"><b >PABRIK MINYAK GORENG</b></p>
-                    <p class="ft2"><b> Kantor Pusat : Komp. KEK Sei Mangkei, Kav.2-3, Kec. Bosar Maligas,</b></p>
-                    <p class="ft2"><b> Kab. Simalungun,</b></p>
-                    <p class="ft2"><b> Sumatera Utara, 21184</b></p>
-                </td>
-                                <td class="tdl tx-center" style="position: absolute; top: 50%; font-size:11px;" width="18%">
-                    <b>No. Dokumen</b>
-                                        <p>INLHO/HRD-F/017</p>
-                                        <!-- <p class="mt-1">{{$form->nomor_surat}}</p> -->
-                </td>
-                                <td class="tdl tx-center" style="position: absolute; top: 50%; font-size:11px;" width="15%">
-                    <b>Tgl. Berlaku</b>
-                                        <!-- <p class="mt-1">{{$form->nomor_surat}}</p> -->
-                                        <p>12-Nov-18</p>
-                </td>
-                        </tr>
-            <tr>
-                                <td class="tdr">
+        <div class="no-print"><button onclick="window.print()">Cetak / Simpan PDF</button></div>
 
+        <table class="header-table">
+                <thead>
+                        <tr class="text-center">
+                                <td class="logo-cell" rowspan="4">
+                                        <img src="${LOGO_SRC}" alt="Logo INL" class="logo-img" width="83">
                                 </td>
-                <td class="tx-center">
-
-                    <b class="ft3">BUSINESS TRIP ORDER (BTO)</b>
-                                        <!-- <p></p> -->
-                </td>
-                <td class="tdl2 tx-center" style="position: absolute; top: 50%; font-size:11px;">
-                    <b>No. Revisi</b>
-                    <p>00</p>
-                </td>
-                                <td class="tdl2 tx-center" style=" position: absolute; top: 50%; font-size:11px;">
-                    <b>Halaman</b>
-                    <p>1 dari 1</p>
-                </td>
-                        </tr>
-                </table>
-                <br>
-                <?php
-                        $bln = array(1=>'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','Nopember','Desember');
-                ?>
-                <table class="tbl mt-1" style="">
-                        <tr class="" style="font-size: 11px;">
-                                <td width="8%"></td>
-                                <td style="" width="20%">Nama Karyawan</td>
-                                <td width="2%">: </td>
-                                <td>${esc(btoRow.employeeNama ?? owner?.nama)}</td>
-                                <td><div style="margin-bottom: 2em;"></div></td>
-                        </tr>
-                        ${owner?.gradeKode === 'Direktur Utama' ? `
-                        <tr class="" style="font-size: 11px;">
-                                <td></td>
-                                <td>Jabatan</td>
-                                <td width="2%">: </td>
-                                <td>Direktur</td>
-                                <td><div style="margin-bottom: 2em;"></div></td>
-                        </tr>
-                        ` : owner?.gradeKode === 'General Manager' ? `
-                        <tr class="" style="font-size: 11px;">
-                                <td></td>
-                                <td>Jabatan</td>
-                                <td width="2%">: </td>
-                                <td>${esc(owner?.gradeKode ?? '-')} {{$form->divisi}}</td>
-                                <td><div style="margin-bottom: 2em;"></div></td>
-                        </tr>
-                        ` : `
-                        <tr class="" style="font-size: 11px;">
-                                <td></td>
-                                <td>Jabatan</td>
-                                <td width="2%">: </td>
-                                <td>${esc(owner?.gradeKode ?? '-')}</td>
-                                <td><div style="margin-bottom: 2em;"></div></td>
-                        </tr>
-                        `}
-                        <tr class="" style="font-size: 11px;">
-                                <td></td>
-                                <td>Departemen</td>
-                                <td width="2%">: </td>
-                                <td>${esc(owner?.unitNama ?? '-')}</td>
-                                <td><div style="margin-bottom: 2em;"></div></td>
-                        </tr>
-                </table>
-                <br>
-                <table class="tbl mt-1" style="">
-                        <tr>
-                                <td width="8%"></td>
-                                <td style="" width="20%"></td>
-                                <td width="2%"></td>
-                                <td style="font-size: 14px;"><div style="margin-left: 8.5em; margin-bottom: 0.5em;"><b>DETAIL</b></div></td>
-                                <td><div style="margin-bottom: 2em;"></div></td>
-                        </tr>
-                        <!-- <tr>RENCANA KEBUTUHAN TENAGA KERJA</tr> -->
-                        <tr class="" style="font-size: 11px;">
-                                <td width="8%"></td>
-                                <td style="" width="20%">Tujuan</td>
-                                <td width="2%">: </td>
-                                <td>${esc(btoRow.tujuanNama)}</td>
-                                <td><div style="margin-bottom: 2em;"></div></td>
-                        </tr>
-                        <tr class="" style="font-size: 11px;">
-                                <td width="8%"></td>
-                                <td style="" width="20%">Keperluan</td>
-                                <td width="2%">: </td>
-                                <td>${esc(btoRow.kepentingan)}</td>
-                                <td><div style="margin-bottom: 2em;"></div></td>
-                        </tr>
-                        <tr class="" style="font-size: 11px;">
-                                <td width="8%"></td>
-                                <td style="" width="20%">Lama Perjalanan</td>
-                                <td width="2%">: </td>
-                                <td>{{ Carbon\Carbon::parse($form->tgl_berangkat)->locale('id_ID')->isoFormat('LL') }} &nbsp; s/d &nbsp; {{ Carbon\Carbon::parse($form->tgl_kembali)->locale('id_ID')->isoFormat('LL') }}</td>
-                                <td><div style="margin-bottom: 2em;"></div></td>
-                        </tr>
-                        <tr class="" style="font-size: 11px;">
-                                <td width="8%"></td>
-                                <td style="" width="20%">Jarak Perjalanan</td>
-                                <td width="2%">: </td>
-                                <td>${esc(btoRow.jarakKm)} Km</td>
-                                <td><div style="margin-bottom: 2em;"></div></td>
-                        </tr>
-                        <tr class="" style="font-size: 11px;">
-                                <td width="8%"></td>
-                                <td style="" width="20%">Lama</td>
-                                <td width="2%">: </td>
-                                <td>${durationDays(btoRow.estBerangkat, btoRow.estKembali)} Hari</td>
-                                <td><div style="margin-bottom: 2em;"></div></td>
-                        </tr>
-                        <tr class="" style="font-size: 11px;">
-                                <td width="8%"></td>
-                                <td style="" width="20%">Transport</td>
-                                <td width="2%">: </td>
-                                <td>${esc(btoRow.transportLabel)}</td>
-                                <td><div style="margin-bottom: 2em;"></div></td>
-                        </tr>
-                </table>
-                <br>
-                <table class="tbl mt-1" style="">
-                <tr class="" style="font-size: 11px;">
-                                <td width="8%"><div style="margin-top: 2em;"></div></td>
-                                <td width="">Diajukan Tanggal, {{ Carbon\Carbon::parse($form->created_at)->locale('id_ID')->isoFormat('LL') }}</td>
-                                <td></td>
-                                <td></td>
-                        </tr>
-                        <br>
-                        <tr class="">
-                                <td width="8%"></td>
-                                <td style="">
-                                        <center>
-                                                <p style="font-size: 11px;"><b>Pelaksana Tugas</b></p>
-                                                <img style="margin-top: 1em;" src="storage/upload/ttd/signaturePlaceholder.png" width="100">
-                                                <p><b style="font-size: 10px; text-decoration: underline; ">${esc(btoRow.employeeNama ?? owner?.nama)}</b></p>
-                                                ${String(owner?.gradeLevel) === '6' ? `
-                                                <p style="margin-top: -0.9em;"><b style="font-size: 10px;">Direktur</b></p>
-                                                ` : String(owner?.gradeLevel) === '5' ? `
-                                                <p style="margin-top: -0.9em;"><b style="font-size: 10px;">Kabag ${esc(owner?.unitNama)}</b></p>
-                                                ` : `
-                                                <p style="margin-top: -0.9em;"><b style="font-size: 10px;">${esc(owner?.gradeKode)}</b></p>
-                                                `}
-
-                                        </center>
+                                <td class="company-cell" rowspan="3">
+                                        <div class="company-title">PT. Industri Nabati Lestari</div>
+                                        <div class="company-subtitle">Pabrik Minyak Goreng</div>
+                                        <div class="company-address">
+                                                Komp. KEK Sei Mangkei, Kav. 2-3, Kec. Bosar Maligas, Kab. Simalungun, Sumatera Utara, 21184
+                                        </div>
                                 </td>
-                                <td>
-                                        <center>
-                                                <p style="font-size: 11px;"><b>Pemberi Tugas</b></p>
-                                                ${btoRow.status !== 'DRAFT' && btoRow.status !== 'REVISION_DP' ? `
-                                                <img style="margin-top: 1em;" src="storage/upload/ttd/signaturePlaceholder.png" width="100">
-                                                ` : `
-                                                <img style="margin-top: 1em;" src="storage/upload/ttd/polos.png" width="100">
-                                                `}
-                                                <p><b style="font-size: 10px; text-decoration: underline; ">${esc(btoRow.pemberiTugasNama)}</b></p>
-                                                ${String(pemberiTugasRow?.gradeLevel) === '6' ? `
-                                                <p style="margin-top: -0.9em;"><b style="font-size: 10px;">Direktur</b></p>
-                                                ` : String(pemberiTugasRow?.gradeLevel) === '5' ? `
-                                                <p style="margin-top: -0.9em;"><b style="font-size: 10px;">Kabag ${esc(pemberiTugasRow?.unitNama)}</b></p>
-                                                ` : `
-                                                <p style="margin-top: -0.9em;"><b style="font-size: 10px;">${esc(pemberiTugasRow?.gradeKode)}</b></p>
-                                                `}
-                                        </center>
-                                </td>
-                                <td>
-                                        <center>
-                                                <p style="font-size: 11px;"><b>Diketahui</b></p>
-                                                ${sdmLog ? `
-                                                <img style="margin-top: 1em;" src="storage/upload/ttd/signaturePlaceholder.png" width="100">
-                                                ` : `
-                                                <img style="margin-top: 1em;" src="storage/upload/ttd/polos.png" width="100">
-                                                `}
-                                                <p><b style="font-size: 10px; text-decoration: underline; ">${esc(sdmName)}</b></p>
-                                                <p style="margin-top: -0.9em;"><b style="font-size: 10px;">${esc(sdmLog?.actorNama)}</b></p>
-                                        </center>
-                                </td>
-
-
+                                <th class="meta-title-cell">No. Dokumen</th>
+                                <th class="meta-title-cell">Tgl. Berlaku</th>
                         </tr>
-                </table>
-                <!-- <div class="mt-2" >
-                        <center><b class="">PERSYARATAN</b></center>
-                        <div class="row">
-                                <div class="col-md-2"></div>
-                                <div class="col-md-4">Jenis Kelamin</div>
-                                <div class="col-md-6">: Transjakarta</div>
-                        </div>
-                </div> -->
-        <!-- </div> -->
-        <!-- <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
-        <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script> -->
+                        <tr class="text-center">
+                                <td class="meta-value-cell">INLHO/HRD-F/017</td>
+                                <td class="meta-value-cell">12-Nov-18</td>
+                        </tr>
+                        <tr class="text-center">
+                                <th class="meta-title-cell">No. Revisi</th>
+                                <th class="meta-title-cell">Halaman</th>
+                        </tr>
+                        <tr class="text-center">
+                                <th class="doc-title-cell">BUSINESS TRIP ORDER (BTO)</th>
+                                <td class="meta-value-cell">00</td>
+                                <td class="meta-value-cell">1 dari 1</td>
+                        </tr>
+                </thead>
+        </table>
+
+        <table class="section-table">
+                <colgroup>
+                        <col style="width: 8%;">
+                        <col style="width: 20%;">
+                        <col style="width: 2%;">
+                        <col style="width: 70%;">
+                </colgroup>
+                <tr class="sizing-row"><td></td><td></td><td></td><td></td></tr>
+                <tr>
+                        <td class="indent-cell"></td>
+                        <td class="label-cell">Nama Karyawan</td>
+                        <td class="colon-cell">:</td>
+                        <td>${esc(btoRow.employeeNama ?? owner?.nama)}</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td>Jabatan</td>
+                        <td class="colon-cell">:</td>
+                        <td>${esc(owner?.gradeKode ?? '-')}</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td>Departemen</td>
+                        <td class="colon-cell">:</td>
+                        <td>${esc(owner?.unitNama ?? '-')}</td>
+                </tr>
+        </table>
+
+        <table class="section-table">
+                <colgroup>
+                        <col style="width: 8%;">
+                        <col style="width: 20%;">
+                        <col style="width: 2%;">
+                        <col style="width: 70%;">
+                </colgroup>
+                <tr class="sizing-row"><td></td><td></td><td></td><td></td></tr>
+                <tr>
+                        <td colspan="4" class="detail-title">DETAIL</td>
+                </tr>
+                <tr>
+                        <td class="indent-cell"></td>
+                        <td class="label-cell">Tujuan</td>
+                        <td class="colon-cell">:</td>
+                        <td>${esc(btoRow.tujuanNama)}</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td>Keperluan</td>
+                        <td class="colon-cell">:</td>
+                        <td>${esc(btoRow.kepentingan)}</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td>Lama Perjalanan</td>
+                        <td class="colon-cell">:</td>
+                        <td>${dateText(btoRow.estBerangkat)} &nbsp; s/d &nbsp; ${dateText(btoRow.estKembali)}</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td>Jarak Perjalanan</td>
+                        <td class="colon-cell">:</td>
+                        <td>${esc(btoRow.jarakKm ? `${btoRow.jarakKm} Km` : '-')}</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td>Lama</td>
+                        <td class="colon-cell">:</td>
+                        <td>${durationDays(btoRow.estBerangkat, btoRow.estKembali)} Hari</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td>Transport</td>
+                        <td class="colon-cell">:</td>
+                        <td>${esc(btoRow.transportLabel || '-')}</td>
+                </tr>
+        </table>
+
+        <table class="signature-table">
+                <tr>
+                        <td colspan="3" class="signature-date">Diajukan Tanggal, ${dateText(btoRow.submittedAt || btoRow.createdAt)}</td>
+                </tr>
+                <tr>
+                        <td class="signature-cell">
+                                <div>Pelaksana Tugas</div>
+                                <div class="signature-box">${signatureMark(employeeQr)}</div>
+                                <div class="signature-name">${esc(btoRow.employeeNama ?? owner?.nama)}</div>
+                                <div class="signature-position">${esc(owner?.gradeKode || '-')} ${esc(owner?.unitNama || '')}</div>
+                        </td>
+                        <td class="signature-cell">
+                                <div>Pemberi Tugas</div>
+                                <div class="signature-box">${signatureMark(ptQr)}</div>
+                                <div class="signature-name">${esc(btoRow.pemberiTugasNama)}</div>
+                                <div class="signature-position">${esc(pemberiTugasRow?.gradeKode || 'Atasan')} ${esc(pemberiTugasRow?.unitNama || '')}</div>
+                        </td>
+                        <td class="signature-cell">
+                                <div>Diketahui</div>
+                                <div class="signature-box">${signatureMark(sdmQr)}</div>
+                                <div class="signature-name">${esc(sdmName || 'admin-sdm')}</div>
+                                <div class="signature-position">ADM-SDM</div>
+                        </td>
+                </tr>
+        </table>
+        <script type="text/javascript">
+          window.addEventListener('load', () => {
+            setTimeout(() => {
+              window.print();
+            }, 500);
+          });
+        </script>
 </body>
 </html>
 `;

@@ -145,7 +145,7 @@ export default async function meetingRoutes(fastify: FastifyInstance) {
   fastify.put('/:id', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const data = meetingCreateSchema.partial().parse(req.body);
-    const isAdmin = ['super_admin', 'admin'].includes(req.user.role || '');
+    const isAdmin = (req.user.role || '').split(',').some(r => ['super_admin', 'admin'].includes(r));
     const result = await updateMeetingService(
       id,
       req.user.sub,
@@ -162,7 +162,7 @@ export default async function meetingRoutes(fastify: FastifyInstance) {
   fastify.delete('/:id', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const { reason } = z.object({ reason: z.string().min(1) }).parse(req.body);
-    const isAdmin = ['super_admin', 'admin'].includes(req.user.role || '');
+    const isAdmin = (req.user.role || '').split(',').some(r => ['super_admin', 'admin'].includes(r));
     await cancelMeetingService(id, req.user.sub, reason, isAdmin);
     return reply.send(ok({ message: 'Meeting berhasil dibatalkan' }));
   });

@@ -1,12 +1,29 @@
 // ─── SPDK Service ─────────────────────────────────────────────────────────────
 // ─── SPDK Service ─────────────────────────────────────────────────────────────
 import { db }          from '../db/connection'
-import { spdk, spdkApprovalLog, bto, attendStamp, configApproverSpdk, localUserCache } from '../db/schema'
+import { spdk, spdkApprovalLog, bto, btoApprovalLog, attendStamp, configApproverSpdk, localUserCache } from '../db/schema'
 import { eq, sql }     from 'drizzle-orm'
 import { AppError }    from '../utils/errorHandler'
-import { generateNomor } from '../utils/romanNumeral'
+import { generateNomor, nomorSpdkFromBto } from '../utils/romanNumeral'
 import { haversineKm } from './geocoding.service'
 import { config as appConfig } from '../config/env'
+
+export async function ensureApproverSpdkConfig() {
+  const [row] = await db.select().from(configApproverSpdk).where(eq(configApproverSpdk.isActive, true)).limit(1)
+  if (row) return row
+
+  try {
+    const [inserted] = await db.insert(configApproverSpdk).values({
+      mode: 'unit_head',
+      isActive: true,
+      keterangan: 'Default otomatis: approver SPDK mengikuti Kepala Bagian/Manager Unit dari Portal SSO',
+    }).returning()
+    return inserted
+  } catch {
+    const [fallback] = await db.select().from(configApproverSpdk).where(eq(configApproverSpdk.isActive, true)).limit(1)
+    return fallback ?? null
+  }
+}
 
 export async function resolveSpdkApproverKabag(
   btoRow: typeof bto.$inferSelect,
@@ -47,8 +64,19 @@ export async function resolveSpdkApproverKabag(
 
     const atasanData = await atasanRes.json() as { data: any[] }
     const kabag = atasanData.data?.[0]
+    const kabagPortalUserId = kabag?.id ?? null
+    const kabagEmployeeId = kabag?.employeeId ?? atasanEmployeeId ?? null
+    let resolvedId = kabagPortalUserId
+
+    if (kabagEmployeeId) {
+      const kabagCache = await db.query.localUserCache.findFirst({
+        where: eq(localUserCache.employeeId, kabagEmployeeId),
+      })
+      resolvedId = kabagCache?.portalUserId ?? resolvedId
+    }
+
     return {
-      id: kabag?.id ?? cfg?.fixedEmployeeId ?? null,
+      id: resolvedId ?? cfg?.fixedEmployeeId ?? null,
       nama: kabag?.namaLengkap ?? null,
     }
   } catch (err) {
@@ -80,7 +108,7 @@ export async function issueSpdkService(
   if (existingSpdk) throw new AppError('SPDK untuk BTO ini sudah pernah diterbitkan', 400)
 
   // Tentukan approver SPDK
-  const [cfg] = await db.select().from(configApproverSpdk).where(eq(configApproverSpdk.isActive, true)).limit(1)
+  const cfg = await ensureApproverSpdkConfig()
   const approverKabag = await resolveSpdkApproverKabag(btoRow, cfg)
   const approverKabagId = approverKabag.id
 
@@ -94,7 +122,7 @@ export async function issueSpdkService(
     sql`SELECT COALESCE(MAX(CAST(sequence AS INTEGER)), 0) + 1 AS next_seq FROM spdk WHERE tahun = ${String(tahun)}`
   )
   const sequence = Number((seqRow.rows[0] as any).next_seq)
-  const nomorSpdk = customNomorSpdk || generateNomor(sequence, 'SPDK', now)
+  const nomorSpdk = customNomorSpdk || nomorSpdkFromBto(btoRow.nomorBto) || generateNomor(sequence, 'SPDK', now)
 
   const spdkStatus = autoApprove ? 'APPROVED' : 'KABAG_REVIEW'
 
@@ -117,6 +145,17 @@ export async function issueSpdkService(
   const btoNextStatus = autoApprove ? 'ACTIVE' : 'KABAG_REVIEW'
   await db.update(bto).set({ status: btoNextStatus, updatedAt: now }).where(eq(bto.id, btoId))
 
+  await db.insert(btoApprovalLog).values({
+    btoId,
+    tahap:      'admin_spdk',
+    aksi:       'issued',
+    actorId:    actor.id,
+    actorNama:  actor.nama,
+    statusDari: btoRow.status,
+    statusKe:   'KABAG_REVIEW',
+    catatan:    catatanAdmin || `SPDK diterbitkan dengan nomor ${nomorSpdk}`,
+  })
+
   await db.insert(spdkApprovalLog).values({
     spdkId:    inserted.id,
     aksi:      'issued',
@@ -132,6 +171,16 @@ export async function issueSpdkService(
       actorId:   actor.id,
       actorNama: actor.nama,
       catatan:   'Auto-approved: Pemberi tugas = Kabag SPDK approver',
+    })
+    await db.insert(btoApprovalLog).values({
+      btoId,
+      tahap:      'persetujuan_spdk',
+      aksi:       'auto_approve',
+      actorId:    actor.id,
+      actorNama:  actor.nama,
+      statusDari: 'KABAG_REVIEW',
+      statusKe:   'ACTIVE',
+      catatan:    'Persetujuan SPDK dilewati otomatis karena pemberi tugas sama dengan approver SPDK',
     })
   }
 
@@ -167,6 +216,17 @@ export async function kabagApproveSpdkService(
 
   await db.insert(spdkApprovalLog).values({
     spdkId, aksi, actorId: actor.id, actorNama: actor.nama, catatan,
+  })
+
+  await db.insert(btoApprovalLog).values({
+    btoId:      spdkRow.btoId,
+    tahap:      'persetujuan_spdk',
+    aksi,
+    actorId:    actor.id,
+    actorNama:  actor.nama,
+    statusDari: 'KABAG_REVIEW',
+    statusKe:   nextStatusBto,
+    catatan,
   })
 
   return { status: nextStatusSpdk }

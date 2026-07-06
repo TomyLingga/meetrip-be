@@ -14,12 +14,15 @@ import {
   localUserCache,
   spdk as spdkTable,
   spdkApprovalLog,
+  refTransport,
 } from '../db/schema'
 import { AppError } from '../utils/errorHandler'
 import { btoPrintTemplate } from '../utils/print-templates/btoPdf'
 import { spdkPrintTemplate } from '../utils/print-templates/spdkPdf'
 import { panjarPrintTemplate } from '../utils/print-templates/panjarPdf'
+import { panjarLuarNegeriPrintTemplate } from '../utils/print-templates/panjarLuarNegeriPdf'
 import { btePrintTemplate } from '../utils/print-templates/btePdf'
+import { bteLuarNegeriPrintTemplate } from '../utils/print-templates/bteLuarNegeriPdf'
 
 const paramsSchema = z.object({
   btoId: z.string().uuid(),
@@ -94,6 +97,15 @@ function durationDays(start: unknown, end: unknown) {
 async function qrDataUrl(payload: Record<string, unknown> | null) {
   if (!payload) return null
   return QRCode.toDataURL(JSON.stringify(payload), {
+    errorCorrectionLevel: 'M',
+    margin: 1,
+    width: 118,
+  })
+}
+
+async function qrTextDataUrl(text: string | null) {
+  if (!text) return null
+  return QRCode.toDataURL(text, {
     errorCorrectionLevel: 'M',
     margin: 1,
     width: 118,
@@ -267,7 +279,24 @@ async function renderBto(btoRow: BtoRow, owner: any, logs: BtoLog[]) {
   }
   
   const sdmName = sdmLog ? sdmLog.actorNama : ''
-  return btoPrintTemplate(btoRow, owner, ptRow, sdmLog, sdmName || '', LOGO_SRC, esc, dateText, durationDays)
+
+  // Generate QR Codes
+  const employeeQrText = `Pelaksana: ${btoRow.employeeNama ?? owner?.nama}\nTanggal: ${dateTimeText(btoRow.createdAt)}`
+  const employeeQr = await qrTextDataUrl(employeeQrText)
+
+  let ptQr = null
+  if (ptLog && (btoRow.status !== 'DRAFT' && btoRow.status !== 'REVISION_DP' && btoRow.status !== 'PT_REVIEW')) {
+    const ptQrText = `Disetujui Pemberi Tugas: ${btoRow.pemberiTugasNama}\nTanggal: ${dateTimeText(ptLog.createdAt)}`
+    ptQr = await qrTextDataUrl(ptQrText)
+  }
+
+  let sdmQr = null
+  if (sdmLog) {
+    const sdmQrText = `Diketahui SDM: ${sdmLog.actorNama}\nTanggal: ${dateTimeText(sdmLog.createdAt)}`
+    sdmQr = await qrTextDataUrl(sdmQrText)
+  }
+
+  return btoPrintTemplate(btoRow, owner, ptRow, sdmLog, sdmName || '', LOGO_SRC, esc, dateText, durationDays, employeeQr, ptQr, sdmQr)
 }
 
 async function renderSpdk(
@@ -277,48 +306,16 @@ async function renderSpdk(
   logs: SpdkLog[],
   stamp: AttendStampRow | null,
 ) {
-  const issueLog = pickLog(logs, (log) => log.aksi === 'issued')
-  const approveLog = pickLog(logs, (log) => log.aksi === 'approve')
-  const attendQr = await qrDataUrl(stamp
-    ? {
-        document: 'SPDK_ATTEND',
-        nomorSpdk: spdkRow.nomorSpdk,
-        nomorBto: btoRow.nomorBto,
-        employeeName: btoRow.employeeNama ?? owner?.nama,
-        employeeId: stamp.employeeId,
-        location: {
-          latitude: stamp.stampLat,
-          longitude: stamp.stampLng,
-          distanceFromDestinationMeter: stamp.jarakDariTujuanM,
-          destinationName: btoRow.tujuanNama,
-          destinationAddress: btoRow.tujuanAlamat,
-        },
-        valid: stamp.isValid,
-        adminOverride: stamp.isAdminOverride,
-        overrideBy: stamp.overrideOlehNama,
-        timestamp: isoText(stamp.stamped_at),
-      }
-    : null)
-  const body = `<p class="center"><b>Nomor: ${esc(spdkRow.nomorSpdk)}</b></p>
-  <section class="box">
-    <p class="section-title">I. Diberikan Kepada</p>
-    ${employeeSection(btoRow, owner)}
-    ${tripSection(btoRow)}
-  </section>
-  <section class="box">
-    <p class="section-title">II. Catatan</p>
-    <ul>
-      <li>Biaya ditanggung oleh PT. Industri Nabati Lestari.</li>
-      <li>Tanggal kembali dari perjalanan harap dilaporkan kepada PT. Industri Nabati Lestari.</li>
-      <li>Mohon agar pihak berwenang memberikan bantuan seperlunya.</li>
-    </ul>
-  </section>
-  ${signatureSection([
-    signatureSlot('QR Attend / Stempel Tujuan', btoRow.employeeNama ?? owner?.nama, stamp ? dateTimeText(stamp.stamped_at) : null, attendQr),
-    await approvalSlot('Kabag / SDM', 'SPDK', 'Kabag Approval', btoRow, approveLog, spdkRow.approverKabagNama ?? ''),
-    await approvalSlot('Diterbitkan Oleh', 'SPDK', 'Admin Issuer', btoRow, issueLog, spdkRow.diterbitkanNama ?? 'PT. Industri Nabati Lestari'),
-  ])}`
-  return documentShell('Form SPDK', 'SURAT PERINTAH PERJALANAN DINAS KARYAWAN', body, 'MT-SPDK')
+  const isApproved = logs.some((log) => log.aksi === 'approve' || log.aksi === 'issued')
+  const kabagLog = pickLog(logs, (log) => log.aksi === 'approve' || log.aksi === 'issued')
+  
+  let kabagQr = null
+  if (kabagLog && isApproved) {
+    const kabagQrText = `Disetujui Kabag SDM & Sistem: ${spdkRow.approverKabagNama || 'Ferdiansyah'}\nTanggal: ${dateTimeText(kabagLog.createdAt || spdkRow.createdAt)}`
+    kabagQr = await qrTextDataUrl(kabagQrText)
+  }
+
+  return spdkPrintTemplate(btoRow, owner, spdkRow, logs, stamp, LOGO_SRC, esc, dateText, durationDays, kabagQr)
 }
 
 async function renderDp(btoRow: BtoRow, owner: any, dpRow: any, logs: DpLog[]) {
@@ -337,7 +334,41 @@ async function renderDp(btoRow: BtoRow, owner: any, dpRow: any, logs: DpLog[]) {
     ptRow = cached[0] || null
   }
 
-  return panjarPrintTemplate(btoRow, owner, ptRow, logs, LOGO_SRC, esc, dateText, durationDays, money)
+  // Generate QR for Finance approval of DP (from btoApprovalLog table where tahap === 'admin_dp')
+  const financeLog = await db.query.btoApprovalLog.findFirst({
+    where: and(
+      eq(btoApprovalLog.btoId, btoRow.id),
+      eq(btoApprovalLog.tahap, 'admin_dp'),
+      eq(btoApprovalLog.aksi, 'approve'),
+    ),
+    orderBy: [desc(btoApprovalLog.createdAt)],
+  })
+
+  let financeQr = null
+  if (financeLog && btoRow.status !== 'ADMIN_DP_REVIEW') {
+    const financeQrText = `Disetujui Keuangan: ${financeLog.actorNama}\nTanggal: ${dateTimeText(financeLog.createdAt)}`
+    financeQr = await qrTextDataUrl(financeQrText)
+  }
+
+  const spdkRow = await db.query.spdk.findFirst({ where: eq(spdkTable.btoId, btoRow.id) })
+  const printBtoRow = spdkRow?.nomorSpdk ? { ...btoRow, nomorBto: spdkRow.nomorSpdk } : btoRow
+
+  if (btoRow.wilayahTipe === 'luar_negeri') {
+    return panjarLuarNegeriPrintTemplate({
+      btoRow: printBtoRow,
+      owner,
+      ptRow,
+      dpRow: { ...dpRow, dpRincian: (dpRow as any)?.dpRincian ?? [] },
+      logs,
+      LOGO_SRC,
+      esc,
+      dateText,
+      durationDays,
+      money,
+      financeQr,
+    })
+  }
+  return panjarPrintTemplate(printBtoRow, owner, ptRow, logs, LOGO_SRC, esc, dateText, durationDays, money, dpRow, financeQr)
 }
 
 async function renderBte(btoRow: BtoRow, owner: any, bteRow: any, logs: BteLog[]) {
@@ -363,12 +394,46 @@ async function renderBte(btoRow: BtoRow, owner: any, bteRow: any, logs: BteLog[]
     dpRow = dpList[0] || null;
   }
 
-  return btePrintTemplate(btoRow, owner, ptRow, logs, LOGO_SRC, esc, dateText, durationDays, money, bteRow, dpRow)
+  // Generate QR for Admin/SDM approval of BTE
+  const adminLog = pickLog(logs, (log) => log.aksi === 'approve')
+  let adminQr = null
+  if (adminLog && bteRow.status !== 'ADMIN_REVIEW') {
+    const adminQrText = `Disetujui BTE: ${adminLog.actorNama}\nTanggal: ${dateTimeText(adminLog.createdAt)}`
+    adminQr = await qrTextDataUrl(adminQrText)
+  }
+
+  const spdkRow = await db.query.spdk.findFirst({ where: eq(spdkTable.btoId, btoRow.id) })
+  const printBtoRow = spdkRow?.nomorSpdk ? { ...btoRow, nomorBto: spdkRow.nomorSpdk } : btoRow
+
+  if (btoRow.wilayahTipe === 'luar_negeri') {
+    return bteLuarNegeriPrintTemplate({
+      btoRow: printBtoRow,
+      owner,
+      ptRow,
+      bteRow,
+      dpRow,
+      logs,
+      LOGO_SRC,
+      esc,
+      dateText,
+      durationDays,
+      money,
+      adminQr,
+    })
+  }
+  return btePrintTemplate(printBtoRow, owner, ptRow, logs, LOGO_SRC, esc, dateText, durationDays, money, bteRow, dpRow, adminQr)
 }
 
 async function loadBtoContext(btoId: string) {
   const [btoRow] = await db.select().from(bto).where(eq(bto.id, btoId)).limit(1)
   if (!btoRow) throw new AppError('BTO tidak ditemukan', 404)
+
+  if (!btoRow.transportLabel && btoRow.transportId) {
+    const [tRow] = await db.select().from(refTransport).where(eq(refTransport.id, btoRow.transportId)).limit(1)
+    if (tRow) {
+      btoRow.transportLabel = tRow.label
+    }
+  }
 
   const owner = await db.query.localUserCache.findFirst({
     where: eq(localUserCache.portalUserId, btoRow.employeeId),
@@ -377,7 +442,8 @@ async function loadBtoContext(btoId: string) {
 }
 
 function assertDocumentAccess(btoRow: BtoRow, user: any, spdkRow?: typeof spdkTable.$inferSelect | null) {
-  if (['super_admin', 'admin', 'sdm'].includes(user.role ?? '')) return
+  const roles = (user.role ?? '').split(',')
+  if (roles.some((r: string) => ['super_admin', 'admin', 'sdm'].includes(r))) return
   const userIds = [user.sub, user.employeeId].filter(Boolean)
   if (userIds.includes(btoRow.employeeId) || userIds.includes(btoRow.pemberiTugasId ?? '')) return
   if (spdkRow && userIds.includes(spdkRow.approverKabagId ?? '')) return
@@ -395,7 +461,35 @@ export default async function documentRoutes(fastify: FastifyInstance) {
     return reply.type('text/html; charset=utf-8').send(await renderBto(btoRow, owner, logs))
   })
 
+  // Alias with /pdf suffix
+  fastify.get('/bto/:btoId/pdf', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { btoId } = paramsSchema.parse(req.params)
+    const { btoRow, owner } = await loadBtoContext(btoId)
+    assertDocumentAccess(btoRow, req.user)
+    const logs = await db.select().from(btoApprovalLog)
+      .where(eq(btoApprovalLog.btoId, btoId))
+      .orderBy(desc(btoApprovalLog.createdAt))
+    return reply.type('text/html; charset=utf-8').send(await renderBto(btoRow, owner, logs))
+  })
+
   fastify.get('/spdk/:btoId', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { btoId } = paramsSchema.parse(req.params)
+    const { btoRow, owner } = await loadBtoContext(btoId)
+    const [spdkRow] = await db.select().from(spdkTable).where(eq(spdkTable.btoId, btoId)).limit(1)
+    if (!spdkRow) throw new AppError('SPDK belum diterbitkan untuk BTO ini', 404)
+    assertDocumentAccess(btoRow, req.user, spdkRow)
+    const logs = await db.select().from(spdkApprovalLog)
+      .where(eq(spdkApprovalLog.spdkId, spdkRow.id))
+      .orderBy(desc(spdkApprovalLog.createdAt))
+    const [stamp] = await db.select().from(attendStamp)
+      .where(eq(attendStamp.btoId, btoId))
+      .orderBy(desc(attendStamp.stamped_at))
+      .limit(1)
+    return reply.type('text/html; charset=utf-8').send(await renderSpdk(btoRow, owner, spdkRow, logs, stamp ?? null))
+  })
+
+  // Alias with /pdf suffix
+  fastify.get('/spdk/:btoId/pdf', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { btoId } = paramsSchema.parse(req.params)
     const { btoRow, owner } = await loadBtoContext(btoId)
     const [spdkRow] = await db.select().from(spdkTable).where(eq(spdkTable.btoId, btoId)).limit(1)
@@ -426,7 +520,39 @@ export default async function documentRoutes(fastify: FastifyInstance) {
     return reply.type('text/html; charset=utf-8').send(await renderDp(btoRow, owner, dpRow, logs))
   })
 
+  // Alias with /pdf suffix
+  fastify.get('/dp/:btoId/pdf', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { btoId } = paramsSchema.parse(req.params)
+    const { btoRow, owner } = await loadBtoContext(btoId)
+    assertDocumentAccess(btoRow, req.user)
+    const dpRow = await db.query.dp.findFirst({
+      where: eq(dpTable.btoId, btoId),
+      with: { dpRincian: true },
+    })
+    if (!dpRow) throw new AppError('Panjar/DP belum tersedia untuk BTO ini', 404)
+    const logs = await db.select().from(dpApprovalLog)
+      .where(eq(dpApprovalLog.dpId, dpRow.id))
+      .orderBy(desc(dpApprovalLog.createdAt))
+    return reply.type('text/html; charset=utf-8').send(await renderDp(btoRow, owner, dpRow, logs))
+  })
+
   fastify.get('/bte/:btoId', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { btoId } = paramsSchema.parse(req.params)
+    const { btoRow, owner } = await loadBtoContext(btoId)
+    assertDocumentAccess(btoRow, req.user)
+    const bteRow = await db.query.bte.findFirst({
+      where: eq(bteTable.btoId, btoId),
+      with: { bteRincian: true, bteBiayaLain: true },
+    })
+    if (!bteRow) throw new AppError('BTE belum tersedia untuk BTO ini', 404)
+    const logs = await db.select().from(bteApprovalLog)
+      .where(eq(bteApprovalLog.bteId, bteRow.id))
+      .orderBy(desc(bteApprovalLog.createdAt))
+    return reply.type('text/html; charset=utf-8').send(await renderBte(btoRow, owner, bteRow, logs))
+  })
+
+  // Alias with /pdf suffix
+  fastify.get('/bte/:btoId/pdf', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { btoId } = paramsSchema.parse(req.params)
     const { btoRow, owner } = await loadBtoContext(btoId)
     assertDocumentAccess(btoRow, req.user)

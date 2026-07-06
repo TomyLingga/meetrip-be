@@ -1,315 +1,316 @@
 export function panjarLuarNegeriPrintTemplate(data: any) {
+  const { btoRow, owner, ptRow, dpRow, logs, LOGO_SRC, esc, dateText, durationDays, money, financeQr } = data;
+
+  const departureTime = btoRow.estBerangkat ? new Date(btoRow.estBerangkat).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', timeZone: 'Asia/Jakarta'}).replace('.', ':') : '07:00';
+  const arrivalTime = btoRow.estKembali ? new Date(btoRow.estKembali).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', timeZone: 'Asia/Jakarta'}).replace('.', ':') : '23:00';
+
+  const jobLevelName = (level: number) => {
+    switch (level) {
+      case 1: return 'JUNIOR STAFF/EQUAL';
+      case 2: return 'STAFF/EQUAL';
+      case 3: return 'SENIOR STAFF/EQUAL';
+      case 4: return 'EXECUTIVE/EQUAL';
+      case 5: return 'GENERAL MANAGER/EQUAL';
+      case 6: return 'DIRECTOR/EQUAL';
+      case 13: return 'SEVP/COMMISSIONER/EQUAL';
+      default: return 'STAFF/EQUAL';
+    }
+  };
+
   return `
 <!DOCTYPE html>
 <html>
 <head>
-        <title>Surat Pengajuan Panjar</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/css/bootstrap.min.css" integrity="sha384-zCbKRCUGaJDkqS1kPbPd7TveP5iyJE0EjAuZQTgFLD2ylzuqKfdKlfG/eSrtxUkn" crossorigin="anonymous">
+        <title>Detail of Down Payment (DP) Abroad</title>
+        <style type="text/css">
+                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+                @page { size: A4 portrait; margin: 15mm; }
+                * { box-sizing: border-box; }
+                body {
+                        font-family: Arial, Helvetica, sans-serif;
+                        font-size: 10px;
+                        line-height: 1.3;
+                        color: black;
+                        margin: 0;
+                }
+                @media screen {
+                        body {
+                                margin: 40px auto;
+                                max-width: 210mm;
+                                padding: 15mm;
+                                background: white;
+                                box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+                                border: 1px solid #ddd;
+                        }
+                        html {
+                                background: #f3f4f6;
+                        }
+                        .no-print {
+                                max-width: 210mm;
+                                margin: 0 auto 10px;
+                        }
+                }
+                .under {
+                        text-decoration: underline;
+                }
+                .bold {
+                        font-weight: bold;
+                }
+                /* Document Header Table */
+                .header-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                        margin-bottom: 12px;
+                }
+                .header-table td, .header-table th {
+                        border: 1px solid #000;
+                        padding: 8px;
+                        vertical-align: middle;
+                        box-sizing: border-box;
+                }
+                .logo-cell {
+                        width: 15%;
+                        text-align: center;
+                        padding: 5px !important;
+                }
+                .logo-img {
+                        display: block;
+                        margin: 0 auto;
+                        max-width: 100%;
+                        height: auto;
+                        object-fit: contain;
+                }
+                .company-cell {
+                        width: 50%;
+                        text-align: center;
+                }
+                .company-title {
+                        font-size: 14px;
+                        font-weight: 800;
+                        color: #000;
+                        letter-spacing: 0.5px;
+                        text-transform: uppercase;
+                }
+                .company-subtitle {
+                        font-size: 10px;
+                        color: #000;
+                        font-weight: 700;
+                        margin-top: 2px;
+                        text-transform: uppercase;
+                }
+                .company-address {
+                        font-size: 8px;
+                        color: #000;
+                        margin-top: 4px;
+                        line-height: 1.3;
+                        font-weight: 500;
+                }
+                .meta-title-cell {
+                        width: 17.5%;
+                        font-weight: 700;
+                        font-size: 9.5px;
+                        text-transform: uppercase;
+                        color: #000;
+                        text-align: center;
+                }
+                .meta-value-cell {
+                        width: 17.5%;
+                        font-size: 10px;
+                        text-align: center;
+                        font-weight: 600;
+                        color: #000;
+                }
+                .doc-title-cell {
+                        font-size: 11px;
+                        font-weight: 800;
+                        color: #000;
+                        text-align: center;
+                        letter-spacing: 0.5px;
+                        text-transform: uppercase;
+                }
+                .text-center {
+                        text-align: center;
+                }
+                .content-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin-top: 10px;
+                }
+                .content-table td {
+                        border: 1px solid black;
+                        padding: 4px 6px;
+                        vertical-align: top;
+                }
+                .no-border-left-right {
+                        border-left: 0 !important;
+                        border-right: 0 !important;
+                }
+                .footer-table {
+                        width: 100%;
+                        margin-top: 15px;
+                }
+                .address-footer {
+                        width: 100%;
+                        margin-top: 20px;
+                        font-size: 8px;
+                        color: #555;
+                        line-height: 1.3;
+                        border-top: 1px solid #ddd;
+                        padding-top: 8px;
+                        text-align: center;
+                }
+                .no-print { margin: 0 auto 10px; text-align: right; }
+                .no-print button { padding: 6px 10px; border: 1px solid #0f766e; border-radius: 4px; background: #0f766e; color: white; font-weight: 700; cursor: pointer; }
+                @media print { .no-print { display: none; } }
+        </style>
 </head>
-<style type="text/css">
-        .under{
-                text-decoration: underline;
-        }
-        .font{
-                font-family:sans-serif;
-                font-size: 12.5px;
-                color: black;
-        }
-        .bold{
-                font-weight: bold;
-        }
-</style>
-<body style="margin: -15px -26px 0px 0px;">
-        <div style="padding:10px; border:2px solid;">
-                <table class="" width="100%">
-                        <thead>
-                                <tr class="text-center">
-                                        <td class="border border-dark" rowspan="4">
-                                                <img src="storage/upload/surat/inl.png" width="83">
-                                        </td>
-                                        <td class="border border-dark text-center" rowspan="3">
-                                                <strong style="text-decoration: underline; font-size:16px;">PT. INDUSTRI NABATI LESTARI</strong><br>
-                                                <label style="font-size:12px;">PABRIK MINYAK GORENG</label><br>
-                                                <label style="font-size:8px;"><strong>Kantor Pusat:</strong> Komp. KEK Sei Mangkei, Kav.2-3, Kec. Bosar Maligas, Kab. Simalungun, Sumatera Utara, 21184</label>
-                                        </td>
-                                        <th class="border border-dark">
-                                                <strong style="font-size:10px;">No. Dokumen</strong>
-                                        </th>
-                                        <th class="border border-dark">
-                                                <strong style="font-size:10px;">Tgl. Berlaku</strong>
-                                        </th>
-                                </tr>
-                                <tr class="text-center">
-                                        <td class="border border-dark">
-                                                <label style="font-size:10px;">INLHO/BSIS-GEA/F-014</label>
-                                        </td>
-                                        <td class="border border-dark">
-                                                <label style="font-size:10px;">21-Mar-22</label>
-                                        </td>
-                                </tr>
-                                <tr>
-                                        <th class="border border-dark">
-                                                <strong style="font-size:10px;">No.Revisi</strong>
-                                        </th>
-                                        <th class="border border-dark">
-                                                <strong style="font-size:10px;">Halaman</strong>
-                                        </th>
-                                </tr>
-                                <tr class="text-center">
-                                        <th class="border border-dark">
-                                                <strong style="font-size:14px;">DETAIL OF DOWN PAYMENT (DP) ABROAD</strong>
-                                        </th>
-                                        <td class="border border-dark">
-                                                <label style="font-size:10px;">01</label>
-                                        </td>
-                                        <td class="border border-dark">
-                                                <label style="font-size:10px;">1 dari 1</label>
-                                        </td>
-                                </tr>
-                        </thead>
-                </table>
-                <table class="mt-3" width="100%">
-                        <tbody>
-                                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center" width="4%">I</td>
-                                        <!-- <td></td> -->
-                                        <td style="font-style: italic;" width="15%" colspan="3"><strong>SPJ/BTO NUMBER</strong></td>
-                                        @if($form->nomor_surat == '0')
-                                        <td colspan="4">: &nbsp; SURAT BELUM DI TERBITKAN</td>
-                                        @else
-                                        <td colspan="4">: &nbsp; {{$form->nomor_surat}}</td>
-                                        @endif
-                                </tr>
-                                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center">II</td>
-                                        <!-- <td></td> -->
-                                        <td style="font-style: italic;" colspan="3"><strong>NAME</strong></td>
-                                        <td colspan="4">: &nbsp; {{strtoupper($form->nama_pelaksana)}}</td>
-                                </tr>
-                                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center">III</td>
-                                        <!-- <td></td> -->
-                                        <td style="font-style: italic;" colspan="3"><strong>POSITION</strong></td>
-                                        @if($form->jabatan == 'Direktur Utama')
-                                        <td colspan="4">: &nbsp; DIREKTUR</td>
-                                        @elseif($form->jabatan == 'General Manager')
-                                        <td colspan="4">: &nbsp; {{strtoupper($form->jabatan)}} {{strtoupper($form->divisi)}}</td>
-                                        @else
-                                        <td colspan="4">: &nbsp; {{strtoupper($form->jabatan)}}</td>
-                                        @endif
-                                </tr>
-                                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center">IV</td>
-                                        <!-- <td></td> -->
-                                        <td style="font-style: italic;" colspan="3"><strong>JOB LEVEL</strong></td>
-                    @if($joblevel->grade == '1')
-                                        <td colspan="4">: &nbsp; JUNIOR STAFF/EQUAL</td>
-                                        @elseif($joblevel->grade == '2')
-                                        <td colspan="4">: &nbsp; STAFF/EQUAL</td>
-                                        @elseif($joblevel->grade == '3')
-                                        <td colspan="4">: &nbsp; SENIOR STAFF/EQUAL</td>
-                                        @elseif($joblevel->grade == '4')
-                                        <td colspan="4">: &nbsp; EXECUTIVE/EQUAL</td>
-                                        @elseif($joblevel->grade == '5')
-                                        <td colspan="4">: &nbsp; GENERAL MANAGER/EQUAL</td>
-                                        @elseif($joblevel->grade == '6')
-                                        <td colspan="4">: &nbsp; DIRECTOR/EQUAL</td>
-                                        @elseif($joblevel->grade == '13')
-                                        <td colspan="4">: &nbsp; SEVP/COMMISSIONER/EQUAL</td>
-                                        @endif
-                                </tr>
-                                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center">V</td>
-                                        <!-- <td></td> -->
-                                        <td style="font-style: italic;" colspan="3"><strong>DESTINATION</strong></td>
-                                        <td colspan="4">: &nbsp; {{strtoupper($form->tujuan)}}</td>
-                                </tr>
-                                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center">VI</td>
-                                        <!-- <td></td> -->
-                                        <td style="font-style: italic;" colspan="3"><strong>NECESSARY</strong></td>
-                                        <td colspan="4">:  &nbsp; {{strtoupper($form->keperluan)}}</td>
-                                </tr>
-                                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center">VII</td>
-                                        <!-- <td></td> -->
-                                        <td style="font-style: italic;" colspan="3"><strong>TOTAL DAYS</strong></td>
-                                        <td colspan="4">: &nbsp; {{strtoupper($form->lama_hari)}} HARI</td>
-                                </tr>
-                                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center">VIII</td>
-                                        <!-- <td></td> -->
-                                        <td style="font-style: italic;" colspan="3"><strong>PERIODE</strong></td>
-                                        <td colspan="4"></td>
-                                </tr>
-                                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center" rowspan="2"></td>
-                                        <td class="border border-dark text-center" width="4%">VIII.1</td>
-                                        <td style="font-style: italic;" colspan="2"><strong>START</strong></td>
-                                        <td colspan="4">: &nbsp; {{strtoupper(Carbon\Carbon::parse($form->tgl_pergi)->locale('id_ID')->isoFormat('LL'))}}</td>
-                                </tr>
-                                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center">VIII.2</td>
-                                        <td style="font-style: italic;" colspan="2"><strong>END</strong></td>
-                                        <td colspan="4">: &nbsp; {{strtoupper(Carbon\Carbon::parse($form->tgl_sampai)->locale('id_ID')->isoFormat('LL'))}}</td>
-                                </tr>
-                                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center">IX</td>
-                                        <!-- <td></td> -->
-                                        <td style="font-style: italic;" colspan="3"><strong>DESCRIPTION OF SCHEDULE</strong></td>
-                                        <td colspan="4"></td>
-                                </tr>
-                                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center" rowspan="4"></td>
-                                        <td class="border border-dark text-center" width="5%">IX.1</td>
-                                        <td style="font-style: italic;" colspan="2"><strong>DEPARTURE DATE</strong></td>
-                                        <td colspan="4">: &nbsp; {{strtoupper(Carbon\Carbon::parse($form->tgl_pergi)->locale('id_ID')->isoFormat('LL'))}}</td>
-                                </tr>
-                                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center">IX.2</td>
-                                        <td style="font-style: italic;" colspan="2"><strong>DEPARTURE TIME</strong></td>
-                                        <td colspan="4">: &nbsp; {{$form->jam_pergi}}</td>
-                                </tr>
-                                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center">IX.3</td>
-                                        <td style="font-style: italic;" colspan="2"><strong>ARRIVAL DATE</strong></td>
-                                        <td colspan="4">: &nbsp; {{strtoupper(Carbon\Carbon::parse($form->tgl_sampai)->locale('id_ID')->isoFormat('LL'))}}</td>
-                                </tr>
-                                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center">IX.4</td>
-                                        <td style="font-style: italic;" colspan="2"><strong>ARRIVAL TIME</strong></td>
-                                        <td colspan="4">: &nbsp; {{$form->jam_sampai}}</td>
-                                </tr>
-                                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center">X</td>
-                                        <!-- <td></td> -->
-                                        <td style="font-style: italic;" colspan="3"><strong>DETAIL OF TRAVEL EXPENSES</strong></td>
-                                        <td colspan="4"></td>
-                                </tr>
-                                <tr class="border border-dark" style="font-size:10px;">
-                    <td class="border border-dark text-center" rowspan="12"></td>
-                                        <td class="border border-dark text-center" width="8%" rowspan="2"><strong>Number</strong></td>
-                                        <td class="border border-dark text-center" rowspan="2"><strong>Expenditure</strong></td>
-                                        <td class="border border-dark text-center" colspan="5"><strong>Unit Price (USD)</strong></td>
-                                </tr>
-                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center" colspan="2"><strong>Total USD</strong></td>
-                                        <td class="border border-dark text-center" colspan="2"><strong>*USD 1=Rp</strong></td>
-                                        <td class="border border-dark text-center"><strong>Conversion</strong></td>
-                                </tr>
-                                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center">X.1.1</td>
-                                        <td class="border border-dark">HOTEL</td>
-                                        <td class="border border-dark" colspan="2">$ {{$luarnegeri->hotel}}</td>
-                                        <td class="border border-dark" colspan="2">Rp. {{$luarnegeri->kurs_usd}}</td>
-                                        <td class="border border-dark">Rp. {{$luarnegeri->kurs_usd * $luarnegeri->hotel}}</td>
-                                </tr>
-                                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center">X.1.2</td>
-                                        <td class="border border-dark">BREAKFAST</td>
-                                        <td class="border border-dark" colspan="2">$ {{$luarnegeri->sarapan}}</td>
-                                        <td class="border border-dark" colspan="2">Rp. {{$luarnegeri->kurs_usd}}</td>
-                                        <td class="border border-dark">Rp. {{$luarnegeri->kurs_usd * $luarnegeri->sarapan}}</td>
-                                </tr>
-                                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center">X.1.3</td>
-                                        <td class="border border-dark">LUNCH</td>
-                                        <td class="border border-dark" colspan="2">$ {{$luarnegeri->makan_siang}}</td>
-                                        <td class="border border-dark" colspan="2">Rp. {{$luarnegeri->kurs_usd}}</td>
-                                        <td class="border border-dark">Rp. {{$luarnegeri->kurs_usd * $luarnegeri->makan_siang}}</td>
-                                </tr>
-                                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center">X.1.4</td>
-                                        <td class="border border-dark">DINNER</td>
-                                        <td class="border border-dark" colspan="2">$ {{$luarnegeri->makan_malam}}</td>
-                                        <td class="border border-dark" colspan="2">Rp. {{$luarnegeri->kurs_usd}}</td>
-                                        <td class="border border-dark">Rp. {{$luarnegeri->kurs_usd * $luarnegeri->makan_malam}}</td>
-                                </tr>
-                                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center">X.1.5</td>
-                                        <td class="border border-dark">POCKET MONEY</td>
-                                        <td class="border border-dark" colspan="2">$ {{$luarnegeri->saku}}</td>
-                                        <td class="border border-dark" colspan="2">Rp. {{$luarnegeri->kurs_usd}}</td>
-                                        <td class="border border-dark">Rp. {{$luarnegeri->kurs_usd * $luarnegeri->saku}}</td>
-                                </tr>
-                                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center">X.1.6</td>
-                                        <td class="border border-dark">LAUNDRY</td>
-                                        <td class="border border-dark" colspan="2">$ {{$luarnegeri->laundry}}</td>
-                                        <td class="border border-dark" colspan="2">Rp. {{$luarnegeri->kurs_usd}}</td>
-                                        <td class="border border-dark">Rp. {{$luarnegeri->kurs_usd * $luarnegeri->laundry}}</td>
-                                </tr>
-                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center">X.1.7</td>
-                                        <td class="border border-dark">COMMUNICATION</td>
-                                        <td class="border border-dark" colspan="2">$ {{$luarnegeri->komunikasi}}</td>
-                                        <td class="border border-dark" colspan="2">Rp. {{$luarnegeri->kurs_usd}}</td>
-                                        <td class="border border-dark">Rp. {{$luarnegeri->kurs_usd * $luarnegeri->komunikasi}}</td>
-                                </tr>
-                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center">X.1.8</td>
-                                        <td class="border border-dark">LOCAL TRANSPORT</td>
-                                        <td class="border border-dark" colspan="2">$ {{$luarnegeri->transport_dilokasi}}</td>
-                                        <td class="border border-dark" colspan="2">Rp. {{$luarnegeri->kurs_usd}}</td>
-                                        <td class="border border-dark">Rp. {{$luarnegeri->kurs_usd * $luarnegeri->transport_dilokasi}}</td>
-                                </tr>
-                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center">X.1.9</td>
-                                        <td class="border border-dark">AIRPORT TRANSPORT</td>
-                                        <td class="border border-dark" colspan="2">$ {{$luarnegeri->airport}}</td>
-                                        <td class="border border-dark" colspan="2">Rp. {{$luarnegeri->kurs_usd}}</td>
-                                        <td class="border border-dark">Rp. {{$luarnegeri->kurs_usd * $luarnegeri->airport}}</td>
-                                </tr>
-                <tr class="border border-dark" style="font-size:10px;">
-                                        <td class="border border-dark text-center">X.1.10</td>
-                                        <td class="border border-dark">** FLIGHT</td>
-                                        <td class="border border-dark" colspan="2">$ {{$luarnegeri->tiket}}</td>
-                                        <td class="border border-dark" colspan="2">Rp. {{$luarnegeri->kurs_usd}}</td>
-                                        <td class="border border-dark">Rp. {{$luarnegeri->kurs_usd * $luarnegeri->tiket}}</td>
-                                </tr>
-                {{$total = $luarnegeri->sarapan+$luarnegeri->makan_siang+$luarnegeri->makan_malam+
-                           $luarnegeri->hotel+$luarnegeri->saku+$luarnegeri->laundry+
-                           $luarnegeri->komunikasi+$luarnegeri->transport_dilokasi+$luarnegeri->airport+
-                           $luarnegeri->tiket}}
-                                <tr class="border border-dark" style="font-size:10px;">
-                                        <!-- <td></td> -->
-                                        <td class="border border-dark text-center" style="font-style: italic;" colspan="3"><strong>TOTAL</strong></td>
-                                        <!-- <td colspan="3"></td> -->
-                    <td class="border border-dark" colspan="2"><strong>$ {{$total}}</strong></td>
-                                        <td class="border border-dark" colspan="2"><strong>Rp. {{$luarnegeri->kurs_usd}}</strong></td>
-                                        <td class="border border-dark"><strong>Rp. {{$luarnegeri->kurs_usd * $total}}</strong></td>
-                                </tr>
-                        </tbody>
-                </table>
-                <table width="100%" class="mt-5">
-                        <thead>
-                                <tr>
-                                        <td width="60%" style="font-size:11px;">
-                                                <strong>Notes:</strong><br>
-                        <span>* Nilai tukar mata uang berdasarkan nilai tengah Jisdor (US-IDR) BI Tgl</span><br>
-                        <span>** Tiket pesawat yang dibeli adalah tiket pesawat pergi pulang</span>
-                                        </td>
-                                        <td class="text-center">
-                                                <label style="font-size:11px;">Sign by Personalia: <strong style="font-style:italic;">GA Administrator</strong></label>
-                                        </td>
-                                </tr>
-                        </thead>
-                </table>
-        </div>
+<body>
+        <div class="no-print"><button onclick="window.print()">Cetak / Simpan PDF</button></div>
 
-        <div style="position: fixed; bottom: 20px; left: -25px; right: 0px; height: 50px;">
-                <table width="100%">
-                        <tr>
-                                <td>
-                                        <img src="storage/upload/surat/footer.PNG" width="760">
-
+        <!-- Header Table -->
+        <table class="header-table">
+                <thead>
+                        <tr class="text-center">
+                                <td class="logo-cell" rowspan="4">
+                                        <img src="${LOGO_SRC}" alt="Logo INL" class="logo-img" width="83">
                                 </td>
+                                <td class="company-cell" rowspan="3">
+                                        <div class="company-title">PT. Industri Nabati Lestari</div>
+                                        <div class="company-subtitle">Pabrik Minyak Goreng</div>
+                                        <div class="company-address">
+                                                Komp. KEK Sei Mangkei, Kav. 2-3, Kec. Bosar Maligas, Kab. Simalungun, Sumatera Utara, 21184
+                                        </div>
+                                </td>
+                                <th class="meta-title-cell">No. Dokumen</th>
+                                <th class="meta-title-cell">Tgl. Berlaku</th>
                         </tr>
-                </table>
-        </div>
-        <script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/js/bootstrap.bundle.min.js" integrity="sha384-fQybjgWLrvvRgtW6bFlB7jaZrFsaBXjsOMm/tB9LTS58ONXgqbR9W8oWht/amnpF" crossorigin="anonymous"></script>
+                        <tr class="text-center">
+                                <td class="meta-value-cell">INLHO/BSIS-GEA/F-014</td>
+                                <td class="meta-value-cell">21-Mar-22</td>
+                        </tr>
+                        <tr class="text-center">
+                                <th class="meta-title-cell">No. Revisi</th>
+                                <th class="meta-title-cell">Halaman</th>
+                        </tr>
+                        <tr class="text-center">
+                                <th class="doc-title-cell">DETAIL OF DOWN PAYMENT (DP) ABROAD</th>
+                                <td class="meta-value-cell">01</td>
+                                <td class="meta-value-cell">1 dari 1</td>
+                        </tr>
+                </thead>
+        </table>
+
+        <!-- Content Table -->
+        <table class="content-table">
+                <tr>
+                        <td width="5%" align="center">I</td>
+                        <td width="30%" class="bold" style="font-style: italic;">SPJ/BTO NUMBER</td>
+                        <td>: &nbsp; ${esc(btoRow.nomorBto || 'SURAT BELUM DITERBITKAN')}</td>
+                </tr>
+                <tr>
+                        <td align="center">II</td>
+                        <td class="bold" style="font-style: italic;">NAME</td>
+                        <td>: &nbsp; ${esc((btoRow.employeeNama || owner?.nama || '').toUpperCase())}</td>
+                </tr>
+                <tr>
+                        <td align="center">III</td>
+                        <td class="bold" style="font-style: italic;">POSITION</td>
+                        <td>: &nbsp; ${esc((owner?.gradeKode || '').toUpperCase())}</td>
+                </tr>
+                <tr>
+                        <td align="center">IV</td>
+                        <td class="bold" style="font-style: italic;">JOB LEVEL</td>
+                        <td>: &nbsp; ${jobLevelName(owner?.gradeLevel)}</td>
+                </tr>
+                <tr>
+                        <td align="center">V</td>
+                        <td class="bold" style="font-style: italic;">DESTINATION</td>
+                        <td>: &nbsp; ${esc(btoRow.tujuanNama).toUpperCase()}</td>
+                </tr>
+                <tr>
+                        <td align="center">VI</td>
+                        <td class="bold" style="font-style: italic;">NECESSARY</td>
+                        <td>: &nbsp; ${esc(btoRow.kepentingan).toUpperCase()}</td>
+                </tr>
+                <tr>
+                        <td align="center">VII</td>
+                        <td class="bold" style="font-style: italic;">TOTAL DAYS</td>
+                        <td>: &nbsp; ${durationDays(btoRow.estBerangkat, btoRow.estKembali)} HARI</td>
+                </tr>
+                <tr>
+                        <td align="center">VIII</td>
+                        <td class="bold" style="font-style: italic;" colspan="2">PERIODE</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td style="font-style: italic; padding-left: 20px;">VIII.1 START</td>
+                        <td>: &nbsp; ${dateText(btoRow.estBerangkat).toUpperCase()}</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td style="font-style: italic; padding-left: 20px;">VIII.2 END</td>
+                        <td>: &nbsp; ${dateText(btoRow.estKembali).toUpperCase()}</td>
+                </tr>
+                <tr>
+                        <td align="center">IX</td>
+                        <td class="bold" style="font-style: italic;" colspan="2">DESCRIPTION OF SCHEDULE</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td style="font-style: italic; padding-left: 20px;">IX.1 DEPARTURE DATE</td>
+                        <td>: &nbsp; ${dateText(btoRow.estBerangkat).toUpperCase()}</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td style="font-style: italic; padding-left: 20px;">IX.2 DEPARTURE TIME</td>
+                        <td>: &nbsp; ${departureTime}</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td style="font-style: italic; padding-left: 20px;">IX.3 ARRIVAL DATE</td>
+                        <td>: &nbsp; ${dateText(btoRow.estKembali).toUpperCase()}</td>
+                </tr>
+                <tr>
+                        <td></td>
+                        <td style="font-style: italic; padding-left: 20px;">IX.4 ARRIVAL TIME</td>
+                        <td>: &nbsp; ${arrivalTime}</td>
+                </tr>
+        </table>
+
+        <!-- Footer Sign Personalia / Reviewer -->
+        <table class="footer-table" border="0" cellspacing="0" cellpadding="0" style="margin-top: 20px;">
+                <tr>
+                        <td width="60%"></td>
+                        <td align="center" style="font-size: 11px;">
+                                <p style="margin-bottom: 5px;"><b>Reviewed & Approved by Finance:</b></p>
+                                ${financeQr ? `
+                                <img src="${financeQr}" style="width: 65px; height: 65px; object-fit: contain; margin-bottom: 5px;" />
+                                ` : `
+                                <div style="height: 65px; border: 1px dashed #ccc; width: 65px; margin-bottom: 5px; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 9px;">Pending</div>
+                                `}
+                                <p style="margin-top: 5px;"><strong>GA Administrator</strong></p>
+                        </td>
+                </tr>
+        </table>
+
+        <!-- Factory Address Footer -->
+        <table class="address-footer" width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                        <td align="center" style="font-size: 8px; color: #555; line-height: 1.3;">
+                                <span style="color: #c2410c; font-weight: bold;">Factory & Main Office:</span> Special Economic Zone - Sei Mangkei, Jl. Kelapa Sawit II Kav. 2-3, Kec. Bosar Maligas, Kab. Simalungun 21184, North Sumatera - Indonesia. P: +62 622 7297 252. E: cs@inl.co.id
+                                <br>
+                                <span style="color: #c2410c; font-weight: bold;">Representative & Marketing Office:</span> Jl. Iskandar Muda No. 115, Medan 20119, North Sumatra - Indonesia. P: +62 61 4521 668. E: cs@inl.co.id &nbsp;|&nbsp; <span style="text-decoration: underline; color: #c2410c; font-weight: bold;">www.inl.co.id</span>
+                        </td>
+                </tr>
+        </table>
+        <script type="text/javascript">
+          window.addEventListener('load', () => {
+            setTimeout(() => {
+              window.print();
+            }, 500);
+          });
+        </script>
 </body>
 </html>
 `;

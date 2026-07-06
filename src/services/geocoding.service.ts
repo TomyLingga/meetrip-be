@@ -20,7 +20,7 @@ interface GoogleGeocodeResponse {
 // ─── Reverse geocode via Google Maps API ─────────────────────────────────────
 export async function reverseGeocode(lat: number, lng: number): Promise<GeoResult> {
   if (!config.googleMaps.apiKey) {
-    return { alamat: `${lat},${lng}`, provinsi: null, negara: null }
+    return { alamat: '', provinsi: null, negara: null }
   }
 
   const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${config.googleMaps.apiKey}&language=id`
@@ -31,7 +31,7 @@ export async function reverseGeocode(lat: number, lng: number): Promise<GeoResul
   }
 
   if (json.status !== 'OK' || !json.results?.length) {
-    return { alamat: `${lat},${lng}`, provinsi: null, negara: null }
+    return { alamat: '', provinsi: null, negara: null }
   }
 
   const result     = json.results[0]
@@ -41,7 +41,7 @@ export async function reverseGeocode(lat: number, lng: number): Promise<GeoResul
   const negara   = components.find(c => c.types.includes('country'))?.long_name ?? null
 
   return {
-    alamat:   result.formatted_address ?? `${lat},${lng}`,
+    alamat:   result.formatted_address ?? '',
     provinsi,
     negara,
   }

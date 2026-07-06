@@ -93,7 +93,7 @@ export default async function spdkRoutes(fastify: FastifyInstance) {
       catatan: z.string().optional()
     }).parse(req.body);
     
-    const actor = { id: req.user.sub, nama: req.user.nama || '' };
+    const actor = { id: req.user.sub, employeeId: req.user.employeeId, nama: req.user.nama || '' };
     const isAdmin = ['super_admin', 'admin'].includes(req.user.role || '');
     const result = await kabagApproveSpdkService(id, aksi, actor, isAdmin, catatan);
     return reply.send(ok(result));

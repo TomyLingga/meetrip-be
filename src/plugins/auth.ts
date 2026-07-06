@@ -30,11 +30,18 @@ declare module 'fastify' {
 }
 
 export default fp(async function authPlugin(fastify: FastifyInstance) {
+  function extractQueryToken(request: FastifyRequest) {
+    if (!request.headers.authorization && (request.query as any)?.token) {
+      request.headers.authorization = `Bearer ${(request.query as any).token}`;
+    }
+  }
+
   fastify.decorate('authenticate', async function (
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
     try {
+      extractQueryToken(request)
       await request.jwtVerify()
     } catch {
       return reply.status(401).send({ success: false, error: 'Unauthorized' })
@@ -47,9 +54,11 @@ export default fp(async function authPlugin(fastify: FastifyInstance) {
     reply: FastifyReply,
   ) {
     try {
+      extractQueryToken(request)
       await request.jwtVerify()
       const user = request.user as JwtPayload
-      if (user.role !== 'admin' && user.role !== 'super_admin') {
+      const roles = (user.role ?? '').split(',')
+      if (!roles.includes('admin') && !roles.includes('super_admin')) {
         return reply.status(403).send({ success: false, error: 'Forbidden: Admin only' })
       }
     } catch {
@@ -63,9 +72,11 @@ export default fp(async function authPlugin(fastify: FastifyInstance) {
     reply: FastifyReply,
   ) {
     try {
+      extractQueryToken(request)
       await request.jwtVerify()
       const user = request.user as JwtPayload
-      if (user.role !== 'sdm' && user.role !== 'admin') {
+      const roles = (user.role ?? '').split(',')
+      if (!roles.includes('sdm') && !roles.includes('admin') && !roles.includes('super_admin')) {
         return reply.status(403).send({ success: false, error: 'Forbidden: SDM or Admin only' })
       }
     } catch {
