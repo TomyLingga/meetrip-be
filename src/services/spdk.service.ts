@@ -46,39 +46,92 @@ export async function resolveSpdkApproverKabag(
     const ownerEmployeeId = ownerCache?.employeeId
     if (!ownerEmployeeId) return { id: cfg?.fixedEmployeeId ?? null, nama: null }
 
-    const ownerRes = await fetch(
+    let currentEmployeeId: string | null | undefined = ownerEmployeeId
+    let iterations = 0
+    while (currentEmployeeId && iterations < 5) {
+      iterations++
+      const empRes = await fetch(
+        `${appConfig.portal.apiUrl}/api/sso/employees?id=${currentEmployeeId}`,
+        { headers: { 'x-internal': appConfig.portal.internalToken } }
+      )
+      if (!empRes.ok) break
+
+      const empData = await empRes.json() as { data: any[] }
+      const currentEmp = empData.data?.[0]
+      if (!currentEmp) break
+
+      const atasanId = currentEmp.atasanId
+      if (!atasanId) break
+
+      // Fetch the atasan to check unit type and title
+      const atasanRes = await fetch(
+        `${appConfig.portal.apiUrl}/api/sso/employees?id=${atasanId}`,
+        { headers: { 'x-internal': appConfig.portal.internalToken } }
+      )
+      if (!atasanRes.ok) break
+
+      const atasanData = await atasanRes.json() as { data: any[] }
+      const atasan = atasanData.data?.[0]
+      if (!atasan) break
+
+      const isKabagUnit = atasan.unitTipe === 'bagian'
+      const isKabagTitle = /kabag|kepala\s+bagian/i.test(atasan.jabatan || '')
+      if (isKabagUnit || isKabagTitle) {
+        const kabagPortalUserId = atasan.id ?? null
+        let resolvedId = kabagPortalUserId
+
+        const kabagEmployeeId = atasan.employeeId ?? atasanId ?? null
+        if (kabagEmployeeId) {
+          const kabagCache = await db.query.localUserCache.findFirst({
+            where: eq(localUserCache.employeeId, kabagEmployeeId),
+          })
+          resolvedId = kabagCache?.portalUserId ?? resolvedId
+        }
+
+        return {
+          id: resolvedId ?? cfg?.fixedEmployeeId ?? null,
+          nama: atasan.namaLengkap ?? null,
+        }
+      }
+
+      currentEmployeeId = atasanId
+    }
+
+    // Fallback to direct atasan
+    const fallbackRes = await fetch(
       `${appConfig.portal.apiUrl}/api/sso/employees?id=${ownerEmployeeId}`,
       { headers: { 'x-internal': appConfig.portal.internalToken } }
     )
-    if (!ownerRes.ok) return { id: cfg?.fixedEmployeeId ?? null, nama: null }
-
-    const ownerData = await ownerRes.json() as { data: any[] }
-    const atasanEmployeeId = ownerData.data?.[0]?.atasanId
-    if (!atasanEmployeeId) return { id: cfg?.fixedEmployeeId ?? null, nama: null }
-
-    const atasanRes = await fetch(
-      `${appConfig.portal.apiUrl}/api/sso/employees?id=${atasanEmployeeId}`,
-      { headers: { 'x-internal': appConfig.portal.internalToken } }
-    )
-    if (!atasanRes.ok) return { id: cfg?.fixedEmployeeId ?? null, nama: null }
-
-    const atasanData = await atasanRes.json() as { data: any[] }
-    const kabag = atasanData.data?.[0]
-    const kabagPortalUserId = kabag?.id ?? null
-    const kabagEmployeeId = kabag?.employeeId ?? atasanEmployeeId ?? null
-    let resolvedId = kabagPortalUserId
-
-    if (kabagEmployeeId) {
-      const kabagCache = await db.query.localUserCache.findFirst({
-        where: eq(localUserCache.employeeId, kabagEmployeeId),
-      })
-      resolvedId = kabagCache?.portalUserId ?? resolvedId
+    if (fallbackRes.ok) {
+      const fallbackData = await fallbackRes.json() as { data: any[] }
+      const directAtasanId = fallbackData.data?.[0]?.atasanId
+      if (directAtasanId) {
+        const directAtasanRes = await fetch(
+          `${appConfig.portal.apiUrl}/api/sso/employees?id=${directAtasanId}`,
+          { headers: { 'x-internal': appConfig.portal.internalToken } }
+        )
+        if (directAtasanRes.ok) {
+          const directAtasanData = await directAtasanRes.json() as { data: any[] }
+          const atasan = directAtasanData.data?.[0]
+          if (atasan) {
+            let resolvedId = atasan.id ?? null
+            const kabagEmployeeId = atasan.employeeId ?? directAtasanId ?? null
+            if (kabagEmployeeId) {
+              const kabagCache = await db.query.localUserCache.findFirst({
+                where: eq(localUserCache.employeeId, kabagEmployeeId),
+              })
+              resolvedId = kabagCache?.portalUserId ?? resolvedId
+            }
+            return {
+              id: resolvedId ?? cfg?.fixedEmployeeId ?? null,
+              nama: atasan.namaLengkap ?? null,
+            }
+          }
+        }
+      }
     }
 
-    return {
-      id: resolvedId ?? cfg?.fixedEmployeeId ?? null,
-      nama: kabag?.namaLengkap ?? null,
-    }
+    return { id: cfg?.fixedEmployeeId ?? null, nama: null }
   } catch (err) {
     console.error('Failed to resolve Kabag (unit_head) from Portal SSO:', err)
     return { id: cfg?.fixedEmployeeId ?? null, nama: null }

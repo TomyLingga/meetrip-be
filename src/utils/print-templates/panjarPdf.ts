@@ -34,7 +34,7 @@ export function panjarPrintTemplate(
         <title>Detail of Down Payment (DP)</title>
         <style type="text/css">
                 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-                @page { size: A4 portrait; margin: 15mm 15mm 30mm; }
+                @page { size: portrait; margin: 15mm 15mm 30mm; }
                 * { box-sizing: border-box; }
                 body {
                         font-family: Arial, Helvetica, sans-serif;

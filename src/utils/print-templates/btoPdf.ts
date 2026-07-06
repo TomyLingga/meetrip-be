@@ -10,7 +10,7 @@ export function btoPrintTemplate(btoRow: any, owner: any, pemberiTugasRow: any, 
         <title>BTO</title>
         <style type="text/css">
                 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-                @page { size: A4 portrait; margin: 15mm; }
+                @page { size: portrait; margin: 15mm; }
                 * { box-sizing: border-box; }
                 body {
                         font-family: "Times New Roman", Times, serif;
