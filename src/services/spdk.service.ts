@@ -395,7 +395,10 @@ export async function attendStampService(
     jarakM   = jarakKm * 1000
     isValid  = jarakM <= radiusMeter
     if (!isValid) {
-      throw new AppError(`Geofence validation failed. Anda berada ${jarakM.toFixed(0)}m dari lokasi tujuan, sedangkan batas maksimum adalah ${radiusMeter}m.`, 400)
+      throw new AppError(
+        `Lokasi absen terlalu jauh: ${jarakM.toFixed(0)}m dari tujuan, radius maksimum ${radiusMeter}m. Tujuan: ${Number(btoRow.tujuanLat).toFixed(6)}, ${Number(btoRow.tujuanLng).toFixed(6)}. GPS terbaca: ${Number(finalLat).toFixed(6)}, ${Number(finalLng).toFixed(6)}.`,
+        400,
+      )
     }
   }
 
