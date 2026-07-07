@@ -1,20 +1,20 @@
 export function spdkPrintTemplate(
-  btoRow: any,
-  owner: any,
-  spdkRow: any,
-  logs: any[],
-  stamp: any,
-  LOGO_SRC: string,
-  esc: (val: any) => string,
-  dateText: (date: any) => string,
-  durationDays: (d1: any, d2: any) => number,
-  kabagQr?: string | null
+        btoRow: any,
+        owner: any,
+        spdkRow: any,
+        logs: any[],
+        stamp: any,
+        LOGO_SRC: string,
+        esc: (val: any) => string,
+        dateText: (date: any) => string,
+        durationDays: (d1: any, d2: any) => number,
+        kabagQr?: string | null
 ) {
-  const signatureMark = kabagQr
-    ? `<img src="${kabagQr}" class="signature-qr" />`
-    : `<div class="signature-check">&#10003;</div>`;
+        const signatureMark = kabagQr
+                ? `<img src="${kabagQr}" class="signature-qr" />`
+                : `<div class="signature-check">&#10003;</div>`;
 
-  return `
+        return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -246,8 +246,14 @@ export function spdkPrintTemplate(
                 .no-print { margin: 0 auto 15px; text-align: right; }
                 .no-print button { padding: 8px 12px; border: 1px solid #0f766e; border-radius: 4px; background: #0f766e; color: white; font-weight: 700; cursor: pointer; }
                 @media print {
-                        .no-print { display: none; }
-                        body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+                        .no-print {
+                                display: none;
+                        }
+
+                        body {
+                                padding-left: 8mm;
+                                padding-right: 8mm;
+                        }
                 }
         </style>
 </head>

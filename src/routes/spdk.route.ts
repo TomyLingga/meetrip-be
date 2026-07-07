@@ -1,7 +1,7 @@
 // ─── Routes: SPDK & Attend Stamp ─────────────────────────────────────────────
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { issueSpdkService, kabagApproveSpdkService, attendStampService, updateSpdkService } from '../services/spdk.service';
+import { issueSpdkService, rejectSpdkDraftService, kabagApproveSpdkService, attendStampService, updateSpdkService, getAttendRadiusMeter } from '../services/spdk.service';
 
 import { db } from '../db/connection';
 import { spdk, spdkApprovalLog } from '../db/schema';
@@ -16,6 +16,9 @@ const attendSchema = z.object({
 });
 
 export default async function spdkRoutes(fastify: FastifyInstance) {
+  fastify.get('/attend-config', { preHandler: [fastify.authenticate] }, async (_req, reply) => {
+    return reply.send(ok({ radiusMeter: await getAttendRadiusMeter() }));
+  });
   
   /** POST /api/spdk/bto/:btoId — Issue SPDK (Admin only) */
   fastify.post('/bto/:btoId', { preHandler: [fastify.authenticateAdmin] }, async (req, reply) => {
@@ -25,9 +28,20 @@ export default async function spdkRoutes(fastify: FastifyInstance) {
       nomorSpdk: z.string().optional(),
       btoUpdateData: z.any().optional(),
     }).parse(req.body);
-    const actor = { id: req.user.sub, employeeId: req.user.employeeId, nama: req.user.nama || '' };
+    const actor = { id: req.user.sub, employeeId: req.user.employeeId, gradeLevel: req.user.gradeLevel, nama: req.user.nama || '' };
     const result = await issueSpdkService(btoId, actor, catatanAdmin, nomorSpdk, btoUpdateData);
     return reply.status(201).send(ok(result));
+  });
+
+  /** POST /api/spdk/bto/:btoId/reject — Reject SPDK draft before issuance */
+  fastify.post('/bto/:btoId/reject', { preHandler: [fastify.authenticateAdmin] }, async (req, reply) => {
+    const { btoId } = req.params as { btoId: string };
+    const { catatan } = z.object({
+      catatan: z.string().min(1),
+    }).parse(req.body);
+    const actor = { id: req.user.sub, nama: req.user.nama || '' };
+    const result = await rejectSpdkDraftService(btoId, actor, catatan);
+    return reply.send(ok(result));
   });
 
   /** GET /api/spdk — List SPDK (Admin/SDM) */
@@ -93,7 +107,7 @@ export default async function spdkRoutes(fastify: FastifyInstance) {
       catatan: z.string().optional()
     }).parse(req.body);
     
-    const actor = { id: req.user.sub, employeeId: req.user.employeeId, nama: req.user.nama || '' };
+    const actor = { id: req.user.sub, employeeId: req.user.employeeId, gradeLevel: req.user.gradeLevel, nama: req.user.nama || '' };
     const isAdmin = ['super_admin', 'admin'].includes(req.user.role || '');
     const result = await kabagApproveSpdkService(id, aksi, actor, isAdmin, catatan);
     return reply.send(ok(result));

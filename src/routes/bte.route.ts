@@ -3,8 +3,8 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { getBteByBtoIdService, createOrUpdateBteService, submitBteService, adminApproveBteService, markBtePaidService } from '../services/bte.service';
 import { db } from '../db/connection';
-import { bte, bteApprovalLog, bto } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { bte, bteApprovalLog, bteBiayaLain, bteRincian, bto, dp } from '../db/schema';
+import { desc, eq } from 'drizzle-orm';
 import { ok } from '../utils/response';
 import { AppError } from '../utils/errorHandler';
 import path from 'path';
@@ -42,6 +42,26 @@ const bteUpsertSchema = z.object({
 });
 
 export default async function bteRoutes(fastify: FastifyInstance) {
+  /** GET /api/bte/admin/list — List BTE for admin review pages */
+  fastify.get('/admin/list', { preHandler: [fastify.authenticateAdmin] }, async (_req, reply) => {
+    const rows = await db.select().from(bte).orderBy(desc(bte.updatedAt));
+    const result = await Promise.all(rows.map(async (row) => {
+      const [btoRow] = await db.select().from(bto).where(eq(bto.id, row.btoId)).limit(1);
+      const [dpRow] = await db.select().from(dp).where(eq(dp.btoId, row.btoId)).limit(1);
+      const rincianRows = await db.select().from(bteRincian).where(eq(bteRincian.bteId, row.id));
+      const biayaLainRows = await db.select().from(bteBiayaLain).where(eq(bteBiayaLain.bteId, row.id));
+
+      return {
+        ...row,
+        bto: btoRow ?? null,
+        dp: dpRow ?? null,
+        bteRincian: rincianRows,
+        bteBiayaLain: biayaLainRows,
+      };
+    }));
+
+    return reply.send(ok(result));
+  });
 
   /** GET /api/bte/bto/:btoId — Dapatkan BTE */
   fastify.get('/bto/:btoId', { preHandler: [fastify.authenticate] }, async (req, reply) => {
@@ -130,7 +150,7 @@ export default async function bteRoutes(fastify: FastifyInstance) {
     const existingBte = await db.query.bte.findFirst({ where: eq(bte.btoId, btoId) });
     const canUpload =
       btoRow.status === 'REPORT_UPLOADED' ||
-      (btoRow.status === 'COMPLETED' && existingBte?.status === 'REVISION');
+      existingBte?.status === 'REVISION';
     if (!isAdmin && !canUpload) {
       throw new AppError('Kuitansi hanya bisa diupload saat pengisian atau revisi BTE', 400);
     }
@@ -141,7 +161,11 @@ export default async function bteRoutes(fastify: FastifyInstance) {
     const uploadDir = path.resolve(config.upload.dir, 'bte', btoId);
     if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
-    const ext = path.extname(data.filename);
+    const ext = path.extname(data.filename).toLowerCase();
+    const allowedExt = new Set(['.pdf', '.png', '.jpg', '.jpeg', '.webp']);
+    if (!allowedExt.has(ext)) {
+      throw new AppError('Kuitansi/receipt wajib berupa PDF atau gambar (PNG/JPG/WEBP)', 400);
+    }
     const filename = `kuitansi_${Date.now()}${ext}`;
     const filepath = path.join(uploadDir, filename);
 
@@ -181,6 +205,18 @@ export default async function bteRoutes(fastify: FastifyInstance) {
     const isAdmin = ['super_admin', 'admin'].includes(req.user.role || '');
     await submitBteService(id, actor, isAdmin);
     return reply.send(ok({ message: 'BTE diajukan' }));
+  });
+
+  /** POST /api/bte/review/:id — Compatibility endpoint for admin BTE review */
+  fastify.post('/review/:id', { preHandler: [fastify.authenticateAdmin] }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { aksi, catatan } = z.object({
+      aksi: z.enum(['approve', 'reject', 'revision']),
+      catatan: z.string().optional(),
+    }).parse(req.body);
+    const actor = { id: req.user.sub, nama: req.user.nama || '' };
+    const result = await adminApproveBteService(id, aksi, actor, catatan);
+    return reply.send(ok(result));
   });
 
   /** POST /api/bte/:id/approve — Admin Approve/Reject/Revision BTE */

@@ -1,9 +1,9 @@
 export function btoPrintTemplate(btoRow: any, owner: any, pemberiTugasRow: any, sdmLog: any, sdmName: string, LOGO_SRC: string, esc: any, dateText: any, durationDays: any, employeeQr?: string | null, ptQr?: string | null, sdmQr?: string | null) {
-  const signatureMark = (qr?: string | null) => qr
-    ? `<img src="${qr}" class="signature-qr" />`
-    : `<div class="signature-check">&#10003;</div>`;
+        const signatureMark = (qr?: string | null) => qr
+                ? `<img src="${qr}" class="signature-qr" />`
+                : `<div class="signature-check">&#10003;</div>`;
 
-  return `
+        return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -189,8 +189,14 @@ export function btoPrintTemplate(btoRow: any, owner: any, pemberiTugasRow: any, 
                 .no-print { margin: 0 auto 10px; text-align: right; }
                 .no-print button { padding: 6px 10px; border: 1px solid #0f766e; border-radius: 4px; background: #0f766e; color: white; font-weight: 700; cursor: pointer; }
                 @media print {
-                        .no-print { display: none; }
-                        body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+                        .no-print {
+                                display: none;
+                        }
+
+                        body {
+                                padding-left: 8mm;
+                                padding-right: 8mm;
+                        }
                 }
         </style>
 </head>

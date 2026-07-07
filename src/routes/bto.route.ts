@@ -2,14 +2,14 @@
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import {
-  createBtoService, updateBtoService, submitBtoService, deleteBtoService,
+  createBtoService, updateBtoService, submitBtoService, deleteBtoService, cancelBtoService,
   adminApproveDpService, ptApproveService, sdmApproveService,
-  listBtoService, listBtoApprovalsService,
+  listBtoService, listBtoApprovalsService, listBtoApprovalsHistoryService,
 } from '../services/bto.service'
 import { kalkulasiPaguBto, getGradeIdByLevel } from '../services/pagu.service'
 import { reverseGeocode, getWilayahTipe, haversineKm } from '../services/geocoding.service'
 import { db } from '../db/connection'
-import { bto, btoApprovalLog, configPemberiTugas, localUserCache, spdk, spdkApprovalLog } from '../db/schema'
+import { attendStamp, bte, bteApprovalLog, bto, btoApprovalLog, configPemberiTugas, localUserCache, spdk, spdkApprovalLog } from '../db/schema'
 import { eq, and, or, inArray, desc } from 'drizzle-orm'
 import { ok, paginated } from '../utils/response'
 import { AppError } from '../utils/errorHandler'
@@ -56,6 +56,93 @@ const approvalSchema = z.object({
   catatan: z.string().optional(),
 })
 
+async function buildBtoApprovalTimeline(id: string) {
+  const logs = await db.select().from(btoApprovalLog).where(eq(btoApprovalLog.btoId, id))
+  const spdkRow = await db.query.spdk.findFirst({ where: eq(spdk.btoId, id) })
+  let approvalLogs: any[] = [...logs]
+
+  if (spdkRow) {
+    const spdkLogs = await db.select().from(spdkApprovalLog).where(eq(spdkApprovalLog.spdkId, spdkRow.id))
+    const hasAdminSpdkLog = logs.some((log) => log.tahap === 'admin_spdk')
+    const hasSpdkApprovalLog = logs.some((log) => log.tahap === 'persetujuan_spdk')
+
+    const mappedSpdkLogs = spdkLogs
+      .filter((log) => {
+        if (log.aksi === 'issued') return !hasAdminSpdkLog
+        if (log.aksi === 'approve' || log.aksi === 'reject') return !hasSpdkApprovalLog
+        return true
+      })
+      .map((log) => ({
+        id: `spdk-${log.id}`,
+        btoId: id,
+        tahap: log.aksi === 'issued' ? 'admin_spdk' : 'persetujuan_spdk',
+        aksi: log.aksi,
+        actorId: log.actorId,
+        actorNama: log.actorNama,
+        statusDari: log.aksi === 'issued' ? 'SPDK_DRAFT' : 'KABAG_REVIEW',
+        statusKe: log.aksi === 'issued' ? 'KABAG_REVIEW' : log.aksi === 'approve' ? 'ACTIVE' : 'REJECTED',
+        catatan: log.catatan,
+        createdAt: log.createdAt,
+      }))
+
+    approvalLogs = [...approvalLogs, ...mappedSpdkLogs]
+  }
+
+  if (!logs.some((log) => log.tahap === 'absen')) {
+    const attendRows = await db.select().from(attendStamp).where(eq(attendStamp.btoId, id))
+    approvalLogs = [
+      ...approvalLogs,
+      ...attendRows.map((stamp) => ({
+        id: `attend-${stamp.id}`,
+        btoId: id,
+        tahap: 'absen',
+        aksi: stamp.isAdminOverride ? 'override_absen' : 'absen',
+        actorId: stamp.overrideOleh || stamp.employeeId,
+        actorNama: stamp.overrideOlehNama || 'Karyawan',
+        statusDari: 'ACTIVE',
+        statusKe: 'ATTENDED',
+        catatan: stamp.isAdminOverride
+          ? 'Absensi dinas dioverride oleh admin.'
+          : `Absen diterima. Jarak dari tujuan: ${Number(stamp.jarakDariTujuanM || 0).toFixed(0)} meter.`,
+        createdAt: stamp.stamped_at,
+      })),
+    ]
+  }
+
+  const bteRow = await db.query.bte.findFirst({ where: eq(bte.btoId, id) })
+  if (bteRow && !logs.some((log) => log.tahap === 'bte' || log.tahap === 'bte_payment')) {
+    const bteLogs = await db.select().from(bteApprovalLog).where(eq(bteApprovalLog.bteId, bteRow.id))
+    const statusByAction: Record<string, { dari: string; ke: string; tahap: string }> = {
+      submit: { dari: 'REPORT_UPLOADED', ke: 'ADMIN_BTE_REVIEW', tahap: 'bte' },
+      approve: { dari: 'ADMIN_BTE_REVIEW', ke: 'BTE_PAYMENT', tahap: 'bte' },
+      revision: { dari: 'ADMIN_BTE_REVIEW', ke: 'REPORT_UPLOADED', tahap: 'bte' },
+      reject: { dari: 'ADMIN_BTE_REVIEW', ke: 'REJECTED', tahap: 'bte' },
+      mark_paid: { dari: 'BTE_PAYMENT', ke: 'COMPLETED', tahap: 'bte_payment' },
+    }
+    approvalLogs = [
+      ...approvalLogs,
+      ...bteLogs.map((log) => {
+        const mapped = statusByAction[log.aksi] || { dari: 'REPORT_UPLOADED', ke: 'ADMIN_BTE_REVIEW', tahap: 'bte' }
+        return {
+          id: `bte-${log.id}`,
+          btoId: id,
+          tahap: mapped.tahap,
+          aksi: log.aksi,
+          actorId: log.actorId,
+          actorNama: log.actorNama,
+          statusDari: mapped.dari,
+          statusKe: mapped.ke,
+          catatan: log.catatan,
+          createdAt: log.createdAt,
+        }
+      }),
+    ]
+  }
+
+  approvalLogs.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime())
+  return approvalLogs
+}
+
 export default async function btoRoutes(fastify: FastifyInstance) {
 
   /** POST /api/bto — Buat BTO baru (DRAFT) */
@@ -95,8 +182,18 @@ export default async function btoRoutes(fastify: FastifyInstance) {
     const result = await listBtoApprovalsService({
       id: req.user.sub,
       employeeId: req.user.employeeId,
-      role: req.user.role ?? 'user'
+      role: req.user.role ?? 'user',
+      gradeLevel: req.user.gradeLevel,
     }, isAll)
+    return reply.send(ok(result))
+  })
+
+  /** GET /api/bto/approvals/history — List Approval History */
+  fastify.get('/approvals/history', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const result = await listBtoApprovalsHistoryService({
+      id: req.user.sub,
+      role: req.user.role ?? 'user'
+    })
     return reply.send(ok(result))
   })
 
@@ -106,39 +203,15 @@ export default async function btoRoutes(fastify: FastifyInstance) {
     const [row] = await db.select().from(bto).where(eq(bto.id, id)).limit(1)
     if (!row) throw new AppError('BTO tidak ditemukan', 404)
 
-    const logs = await db.select().from(btoApprovalLog).where(eq(btoApprovalLog.btoId, id))
-    const spdkRow = await db.query.spdk.findFirst({ where: eq(spdk.btoId, id) })
-    let approvalLogs: any[] = [...logs]
-
-    if (spdkRow) {
-      const spdkLogs = await db.select().from(spdkApprovalLog).where(eq(spdkApprovalLog.spdkId, spdkRow.id))
-      const hasAdminSpdkLog = logs.some((log) => log.tahap === 'admin_spdk')
-      const hasSpdkApprovalLog = logs.some((log) => log.tahap === 'persetujuan_spdk')
-
-      const mappedSpdkLogs = spdkLogs
-        .filter((log) => {
-          if (log.aksi === 'issued') return !hasAdminSpdkLog
-          if (log.aksi === 'approve' || log.aksi === 'reject') return !hasSpdkApprovalLog
-          return true
-        })
-        .map((log) => ({
-          id: `spdk-${log.id}`,
-          btoId: id,
-          tahap: log.aksi === 'issued' ? 'admin_spdk' : 'persetujuan_spdk',
-          aksi: log.aksi,
-          actorId: log.actorId,
-          actorNama: log.actorNama,
-          statusDari: log.aksi === 'issued' ? 'SPDK_DRAFT' : 'KABAG_REVIEW',
-          statusKe: log.aksi === 'issued' ? 'KABAG_REVIEW' : log.aksi === 'approve' ? 'ACTIVE' : 'REJECTED',
-          catatan: log.catatan,
-          createdAt: log.createdAt,
-        }))
-
-      approvalLogs = [...approvalLogs, ...mappedSpdkLogs]
-    }
-
-    approvalLogs.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime())
+    const approvalLogs = await buildBtoApprovalTimeline(id)
     return reply.send(ok({ ...row, approvalLogs }))
+  })
+
+  /** GET /api/bto/:id/logs — List BTO Approval Logs */
+  fastify.get('/:id/logs', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const approvalLogs = await buildBtoApprovalTimeline(id)
+    return reply.send(ok(approvalLogs))
   })
 
   /** PUT /api/bto/:id — Update BTO */
@@ -165,6 +238,14 @@ export default async function btoRoutes(fastify: FastifyInstance) {
     const { id } = req.params as { id: string }
     const isAdmin = (req.user.role ?? '').split(',').some(r => ['super_admin', 'admin'].includes(r))
     const result = await deleteBtoService(id, req.user.sub, isAdmin)
+    return reply.send(ok(result))
+  })
+
+  /** POST /api/bto/:id/cancel — Batalkan BTO oleh user */
+  fastify.post('/:id/cancel', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const { catatan } = z.object({ catatan: z.string() }).parse(req.body)
+    const result = await cancelBtoService(id, { id: req.user.sub, nama: req.user.nama ?? '' }, catatan)
     return reply.send(ok(result))
   })
 
@@ -204,7 +285,7 @@ export default async function btoRoutes(fastify: FastifyInstance) {
     return reply.send(ok({ path: filePath, nama: data.filename }))
   })
 
-  /** POST /api/bto/:id/laporan - Upload laporan perjalanan dinas PDF */
+  /** POST /api/bto/:id/laporan - Upload laporan perjalanan dinas PDF/image */
   fastify.post('/:id/laporan', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { id } = req.params as { id: string }
     const [row] = await db.select().from(bto).where(eq(bto.id, id)).limit(1)
@@ -222,7 +303,10 @@ export default async function btoRoutes(fastify: FastifyInstance) {
     if (!data) throw new AppError('File laporan tidak ditemukan', 400)
 
     const ext = path.extname(data.filename).toLowerCase()
-    if (ext !== '.pdf') throw new AppError('Laporan perjalanan dinas wajib berupa PDF', 400)
+    const allowedExt = new Set(['.pdf', '.png', '.jpg', '.jpeg', '.webp'])
+    if (!allowedExt.has(ext)) {
+      throw new AppError('Laporan perjalanan dinas wajib berupa PDF atau gambar (PNG/JPG/WEBP)', 400)
+    }
 
     const uploadDir = path.resolve(config.upload.dir, 'bto', id)
     if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true })
@@ -244,6 +328,17 @@ export default async function btoRoutes(fastify: FastifyInstance) {
       status: 'REPORT_UPLOADED',
       updatedAt: new Date(),
     }).where(eq(bto.id, id))
+
+    await db.insert(btoApprovalLog).values({
+      btoId: id,
+      tahap: 'laporan',
+      aksi: 'upload',
+      actorId: req.user.sub,
+      actorNama: req.user.nama ?? row.employeeNama ?? 'Karyawan',
+      statusDari: row.status,
+      statusKe: 'REPORT_UPLOADED',
+      catatan: `Laporan perjalanan diupload: ${data.filename}`,
+    })
 
     return reply.send(ok({ path: filePath, nama: data.filename, status: 'REPORT_UPLOADED' }))
   })

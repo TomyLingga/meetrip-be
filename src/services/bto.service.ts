@@ -1,7 +1,7 @@
 // ─── BTO Service ──────────────────────────────────────────────────────────────
 // State machine BTO: Create, Submit, Approval flow
 import { db }        from '../db/connection'
-import { bto, btoApprovalLog, dp, dpApprovalLog, localUserCache, configPemberiTugas, refTransport, spdk } from '../db/schema'
+import { bto, btoApprovalLog, dp, dpApprovalLog, localUserCache, configPemberiTugas, refTransport, spdk, spdkApprovalLog } from '../db/schema'
 import { eq, desc, and, gte, lte, like, or, sql, inArray } from 'drizzle-orm'
 import { AppError }  from '../utils/errorHandler'
 import { generateNomor } from '../utils/romanNumeral'
@@ -13,6 +13,12 @@ import { ensureApproverSpdkConfig, resolveSpdkApproverKabag } from './spdk.servi
 function fallbackNegaraFromWilayah(wilayahTipe?: 'dalam_wilayah' | 'luar_wilayah' | 'luar_negeri' | null) {
   if (!wilayahTipe || wilayahTipe === 'luar_negeri') return null
   return 'Indonesia'
+}
+
+function requireCatatanTindakan(aksi: string, catatan?: string) {
+  if (!catatan?.trim()) {
+    throw new AppError(`Catatan wajib diisi untuk aksi ${aksi}`, 400)
+  }
 }
 
 async function resolveTujuanGeo(
@@ -141,6 +147,59 @@ export async function deleteBtoService(id: string, employeeId: string, isAdmin: 
 
   await db.delete(bto).where(eq(bto.id, id))
   return { id, success: true }
+}
+
+// ─── Batalkan BTO oleh Pembuat (Cancel) ───────────────────────────────────────
+export async function cancelBtoService(id: string, actor: { id: string; nama: string }, catatan: string) {
+  const [existing] = await db.select().from(bto).where(eq(bto.id, id)).limit(1)
+  if (!existing) throw new AppError('BTO tidak ditemukan', 404)
+  if (existing.employeeId !== actor.id) throw new AppError('Tidak diizinkan membatalkan BTO ini', 403)
+
+  const allowedStatuses = ['DRAFT', 'SUBMITTED', 'ADMIN_DP_REVIEW', 'REVISION_DP', 'PT_REVIEW', 'SDM_REVIEW'];
+  if (!allowedStatuses.includes(existing.status)) {
+    throw new AppError(`BTO dengan status ${existing.status} tidak bisa dibatalkan sendiri, harap hubungi Admin`, 400)
+  }
+
+  if (!catatan?.trim()) {
+    throw new AppError('Catatan atau alasan pembatalan wajib diisi', 400)
+  }
+
+  await db.update(bto).set({
+    status: 'REJECTED',
+    updatedAt: new Date(),
+  }).where(eq(bto.id, id))
+
+  await db.insert(btoApprovalLog).values({
+    btoId: id,
+    tahap: 'pemohon',
+    aksi: 'cancel',
+    actorId: actor.id,
+    actorNama: actor.nama,
+    statusDari: existing.status,
+    statusKe: 'REJECTED',
+    catatan: catatan,
+  })
+
+  // Jika butuh DP, dan DP ada, reject juga DP-nya (agar tidak menggantung)
+  if (existing.butuhDp) {
+    const dpRow = await db.query.dp.findFirst({ where: eq(dp.btoId, id) })
+    if (dpRow) {
+      await db.update(dp).set({
+        status: 'REJECTED',
+        updatedAt: new Date(),
+      }).where(eq(dp.id, dpRow.id))
+
+      await db.insert(dpApprovalLog).values({
+        dpId: dpRow.id,
+        aksi: 'cancel',
+        actorId: actor.id,
+        actorNama: actor.nama,
+        catatan: catatan,
+      })
+    }
+  }
+
+  return { id, success: true, status: 'REJECTED' }
 }
 
 // ─── Submit BTO ───────────────────────────────────────────────────────────────
@@ -317,6 +376,7 @@ export async function adminApproveDpService(id: string, aksi: 'approve' | 'rejec
   const [existing] = await db.select().from(bto).where(eq(bto.id, id)).limit(1)
   if (!existing) throw new AppError('BTO tidak ditemukan', 404)
   if (existing.status !== 'ADMIN_DP_REVIEW') throw new AppError('Bukan tahap admin DP review', 400)
+  requireCatatanTindakan(aksi, catatan)
 
   const statusMap = { approve: 'PT_REVIEW', reject: 'REJECTED', revision: 'REVISION_DP' } as const
   const nextStatus = statusMap[aksi]
@@ -342,11 +402,15 @@ export async function adminApproveDpService(id: string, aksi: 'approve' | 'rejec
 }
 
 // ─── Approval: Pemberi Tugas ─────────────────────────────────────────────────
-export async function ptApproveService(id: string, aksi: 'approve' | 'reject', actor: { id: string; nama: string }, catatan?: string) {
+export async function ptApproveService(id: string, aksi: 'approve' | 'reject', actor: { id: string; employeeId?: string | null; nama: string }, catatan?: string) {
   const [existing] = await db.select().from(bto).where(eq(bto.id, id)).limit(1)
   if (!existing) throw new AppError('BTO tidak ditemukan', 404)
   if (existing.status !== 'PT_REVIEW') throw new AppError('Bukan tahap Pemberi Tugas review', 400)
-  if (existing.pemberiTugasId !== actor.id) throw new AppError('Anda bukan pemberi tugas BTO ini', 403)
+  const actorIdentifiers = [actor.id, actor.employeeId].filter((id): id is string => Boolean(id))
+  if (!existing.pemberiTugasId || !actorIdentifiers.includes(existing.pemberiTugasId)) {
+    throw new AppError('Anda bukan pemberi tugas BTO ini', 403)
+  }
+  requireCatatanTindakan(aksi, catatan)
 
   const nextStatus = aksi === 'approve' ? 'SDM_REVIEW' : 'REJECTED'
 
@@ -360,7 +424,8 @@ export async function sdmApproveService(id: string, aksi: 'approve' | 'reject', 
   const [existing] = await db.select().from(bto).where(eq(bto.id, id)).limit(1)
   if (!existing) throw new AppError('BTO tidak ditemukan', 404)
   if (existing.status !== 'SDM_REVIEW') throw new AppError('Bukan tahap SDM review', 400)
-  
+  requireCatatanTindakan(aksi, catatan)
+
   // SDM tidak boleh menyetujui pengajuannya sendiri
   if (existing.employeeId === actor.id) {
     throw new AppError('Anda tidak dapat menyetujui pengajuan perjalanan dinas Anda sendiri', 400)
@@ -437,11 +502,29 @@ async function logApproval(data: {
 }
 
 // ─── List BTO Approvals ───────────────────────────────────────────────────────
-export async function listBtoApprovalsService(actor: { id: string; employeeId?: string | null; role: string }, all: boolean = true) {
+async function isBom1Actor(actor: { id: string; employeeId?: string | null; gradeLevel?: number | null }) {
+  if (Number(actor.gradeLevel) === 13) return true
+
+  const identifiers = [actor.id, actor.employeeId].filter((id): id is string => Boolean(id))
+  if (identifiers.length === 0) return false
+
+  const cached = await Promise.all([
+    ...identifiers.map((id) => db.query.localUserCache.findFirst({ where: eq(localUserCache.portalUserId, id) })),
+    ...identifiers.map((id) => db.query.localUserCache.findFirst({ where: eq(localUserCache.employeeId, id) })),
+  ])
+
+  return cached.some((row) => {
+    const gradeKode = String(row?.gradeKode ?? '').trim().toUpperCase()
+    return gradeKode === 'BOM-1' || Number(row?.gradeLevel) === 13
+  })
+}
+
+export async function listBtoApprovalsService(actor: { id: string; employeeId?: string | null; role: string; gradeLevel?: number | null }, all: boolean = true) {
   const roleConditions: any[] = []
   const actorIdentifiers = [actor.id, actor.employeeId].filter((id): id is string => Boolean(id))
 
   const roles = (actor.role || 'user').split(',')
+  const actorIsBom1 = await isBom1Actor(actor)
 
   if (all && roles.some(r => ['super_admin', 'admin'].includes(r))) {
     roleConditions.push(
@@ -507,18 +590,38 @@ export async function listBtoApprovalsService(actor: { id: string; employeeId?: 
     )
   }
 
+  const unassignedKabagBtoIds = actorIsBom1
+    ? kabagSpdks
+        .filter(s => !s.approverKabagId)
+        .map(s => s.btoId)
+    : []
+
+  if (unassignedKabagBtoIds.length > 0) {
+    roleConditions.push(
+      and(
+        eq(bto.status, 'KABAG_REVIEW'),
+        inArray(bto.id, unassignedKabagBtoIds)
+      )
+    )
+  }
+
   if (cfg?.fixedEmployeeId && actorIdentifiers.includes(cfg.fixedEmployeeId)) {
     roleConditions.push(
       eq(bto.status, 'KABAG_REVIEW')
     )
   }
 
-  roleConditions.push(
-    and(
-      eq(bto.status, 'PT_REVIEW'),
-      eq(bto.pemberiTugasId, actor.id)
+  const pemberiTugasConditions = actorIdentifiers.map((id) => eq(bto.pemberiTugasId, id))
+  if (pemberiTugasConditions.length > 0) {
+    roleConditions.push(
+      and(
+        eq(bto.status, 'PT_REVIEW'),
+        or(...pemberiTugasConditions)
+      )
     )
-  )
+  }
+
+  if (roleConditions.length === 0) return []
 
   if (roleConditions.length === 0) return []
 
@@ -527,4 +630,106 @@ export async function listBtoApprovalsService(actor: { id: string; employeeId?: 
     .orderBy(desc(bto.createdAt))
 
   return rows
+}
+
+// ─── List BTO Approvals History ──────────────────────────────────────────────
+export async function listBtoApprovalsHistoryService(actor: { id: string; role: string }) {
+  const isAdmin = (actor.role || '').split(',').some(r => ['super_admin', 'admin', 'sdm'].includes(r))
+
+  // Base BTO logs
+  let btoLogsQuery = db.select({
+    logId: btoApprovalLog.id,
+    btoId: bto.id,
+    nomorBto: bto.nomorBto,
+    employeeNama: bto.employeeNama,
+    pemberiTugasNama: bto.pemberiTugasNama,
+    tujuanNama: bto.tujuanNama,
+    kepentingan: bto.kepentingan,
+    estBerangkat: bto.estBerangkat,
+    estKembali: bto.estKembali,
+    status: bto.status,
+    approvalRole: btoApprovalLog.tahap,
+    approvalAction: btoApprovalLog.aksi,
+    approvalCatatan: btoApprovalLog.catatan,
+    approvedAt: btoApprovalLog.createdAt,
+    approvalActorNama: btoApprovalLog.actorNama,
+  })
+  .from(btoApprovalLog)
+  .leftJoin(bto, eq(btoApprovalLog.btoId, bto.id))
+  .$dynamic()
+
+  if (!isAdmin) {
+    btoLogsQuery = btoLogsQuery.where(eq(btoApprovalLog.actorId, actor.id))
+  }
+
+  const btoLogsResult = await btoLogsQuery
+
+  // SPDK logs
+  let spdkLogsQuery = db.select({
+    logId: spdkApprovalLog.id,
+    spdkId: spdk.id,
+    btoId: bto.id,
+    nomorBto: bto.nomorBto,
+    employeeNama: bto.employeeNama,
+    pemberiTugasNama: bto.pemberiTugasNama,
+    tujuanNama: bto.tujuanNama,
+    kepentingan: bto.kepentingan,
+    estBerangkat: bto.estBerangkat,
+    estKembali: bto.estKembali,
+    status: bto.status,
+    approvalRole: sql<string>`'kabag_spdk'`,
+    approvalAction: spdkApprovalLog.aksi,
+    approvalCatatan: spdkApprovalLog.catatan,
+    approvedAt: spdkApprovalLog.createdAt,
+    approvalActorNama: spdkApprovalLog.actorNama,
+  })
+  .from(spdkApprovalLog)
+  .leftJoin(spdk, eq(spdkApprovalLog.spdkId, spdk.id))
+  .leftJoin(bto, eq(spdk.btoId, bto.id))
+  .$dynamic()
+
+  if (!isAdmin) {
+    spdkLogsQuery = spdkLogsQuery.where(eq(spdkApprovalLog.actorId, actor.id))
+  }
+
+  const spdkLogsResult = await spdkLogsQuery
+
+  const allLogs = [
+    ...btoLogsResult.map(row => ({
+      id: `bto-${row.logId}`,
+      nomorBto: row.nomorBto,
+      employeeNama: row.employeeNama,
+      pemberiTugasNama: row.pemberiTugasNama,
+      tujuanNama: row.tujuanNama || '',
+      kepentingan: row.kepentingan,
+      estBerangkat: row.estBerangkat?.toISOString(),
+      estKembali: row.estKembali?.toISOString(),
+      status: row.status || '',
+      approvalRole: row.approvalRole || '',
+      approvalAction: row.approvalAction || '',
+      approvalCatatan: row.approvalCatatan,
+      approvedAt: row.approvedAt?.toISOString(),
+      approvalActorNama: row.approvalActorNama,
+    })),
+    ...spdkLogsResult.map(row => ({
+      id: `spdk-${row.logId}`,
+      nomorBto: row.nomorBto,
+      employeeNama: row.employeeNama,
+      pemberiTugasNama: row.pemberiTugasNama,
+      tujuanNama: row.tujuanNama || '',
+      kepentingan: row.kepentingan,
+      estBerangkat: row.estBerangkat?.toISOString(),
+      estKembali: row.estKembali?.toISOString(),
+      status: row.status || '',
+      approvalRole: row.approvalRole,
+      approvalAction: row.approvalAction || '',
+      approvalCatatan: row.approvalCatatan,
+      approvedAt: row.approvedAt?.toISOString(),
+      approvalActorNama: row.approvalActorNama,
+    }))
+  ]
+
+  allLogs.sort((a, b) => new Date(b.approvedAt || 0).getTime() - new Date(a.approvedAt || 0).getTime())
+
+  return allLogs
 }

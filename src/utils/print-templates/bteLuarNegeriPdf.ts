@@ -1,63 +1,63 @@
 export function bteLuarNegeriPrintTemplate(data: any) {
-  const { btoRow, owner, ptRow, bteRow, dpRow, logs, LOGO_SRC, esc, dateText, durationDays, money, adminQr } = data;
+        const { btoRow, owner, ptRow, bteRow, dpRow, logs, LOGO_SRC, esc, dateText, durationDays, money, adminQr } = data;
 
-  const departureTime = btoRow.estBerangkat ? new Date(btoRow.estBerangkat).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', timeZone: 'Asia/Jakarta'}).replace('.', ':') : '07:00';
-  const arrivalTime = btoRow.estKembali ? new Date(btoRow.estKembali).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', timeZone: 'Asia/Jakarta'}).replace('.', ':') : '23:00';
+        const departureTime = btoRow.estBerangkat ? new Date(btoRow.estBerangkat).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }).replace('.', ':') : '07:00';
+        const arrivalTime = btoRow.estKembali ? new Date(btoRow.estKembali).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }).replace('.', ':') : '23:00';
 
-  const jobLevelName = (level: number) => {
-    switch (level) {
-      case 1: return 'JUNIOR STAFF/EQUAL';
-      case 2: return 'STAFF/EQUAL';
-      case 3: return 'SENIOR STAFF/EQUAL';
-      case 4: return 'EXECUTIVE/EQUAL';
-      case 5: return 'GENERAL MANAGER/EQUAL';
-      case 6: return 'DIRECTOR/EQUAL';
-      case 13: return 'SEVP/COMMISSIONER/EQUAL';
-      default: return 'STAFF/EQUAL';
-    }
-  };
+        const jobLevelName = (level: number) => {
+                switch (level) {
+                        case 1: return 'JUNIOR STAFF/EQUAL';
+                        case 2: return 'STAFF/EQUAL';
+                        case 3: return 'SENIOR STAFF/EQUAL';
+                        case 4: return 'EXECUTIVE/EQUAL';
+                        case 5: return 'GENERAL MANAGER/EQUAL';
+                        case 6: return 'DIRECTOR/EQUAL';
+                        case 13: return 'SEVP/COMMISSIONER/EQUAL';
+                        default: return 'STAFF/EQUAL';
+                }
+        };
 
-  // Helper to match database rincian items to their corresponding layout category
-  const findVal = (keywords: string[], excludeKeywords: string[] = []) => {
-    const item = (bteRow?.bteRincian || []).find((r: any) => {
-      const lbl = (r.rincianLabel || '').toLowerCase();
-      const matches = keywords.some(k => lbl.includes(k));
-      const excluded = excludeKeywords.some(k => lbl.includes(k));
-      return matches && !excluded;
-    });
-    return item ? Number(item.nilaiTotal) || 0 : 0;
-  };
+        // Helper to match database rincian items to their corresponding layout category
+        const findVal = (keywords: string[], excludeKeywords: string[] = []) => {
+                const item = (bteRow?.bteRincian || []).find((r: any) => {
+                        const lbl = (r.rincianLabel || '').toLowerCase();
+                        const matches = keywords.some(k => lbl.includes(k));
+                        const excluded = excludeKeywords.some(k => lbl.includes(k));
+                        return matches && !excluded;
+                });
+                return item ? Number(item.nilaiTotal) || 0 : 0;
+        };
 
-  const mealVal = findVal(['meal', 'makan']);
-  const pocketVal = findVal(['pocket', 'saku']);
-  const transportVal = findVal(['transport', 'perjalanan'], ['local', 'lokal', 'airport', 'bandara']);
-  const hotelVal = findVal(['hotel', 'penginapan']);
-  const laundryVal = findVal(['laundry']);
-  const localTransVal = findVal(['local', 'lokal']);
-  const ticketVal = findVal(['ticket', 'tiket']);
-  const commsVal = findVal(['communication', 'komunikasi', 'pulsa', 'telepon']);
-  const airportVal = findVal(['airport', 'bandara']);
+        const mealVal = findVal(['meal', 'makan']);
+        const pocketVal = findVal(['pocket', 'saku']);
+        const transportVal = findVal(['transport', 'perjalanan'], ['local', 'lokal', 'airport', 'bandara']);
+        const hotelVal = findVal(['hotel', 'penginapan']);
+        const laundryVal = findVal(['laundry']);
+        const localTransVal = findVal(['local', 'lokal']);
+        const ticketVal = findVal(['ticket', 'tiket']);
+        const commsVal = findVal(['communication', 'komunikasi', 'pulsa', 'telepon']);
+        const airportVal = findVal(['airport', 'bandara']);
 
-  // Calculate totals (with dollar formatting flag if applicable)
-  const isBteDollar = (bteRow?.bteRincian || []).some((r: any) => r.useDollar);
-  const dpTotal = (dpRow?.dpRincian || []).reduce((acc: number, item: any) => acc + (Number(item.nilaiTotal) || 0), 0);
-  const bteRincianTotal = mealVal + pocketVal + transportVal + hotelVal + laundryVal + localTransVal + ticketVal + commsVal + airportVal;
-  const bteBiayaLainTotal = (bteRow?.bteBiayaLain || []).reduce((acc: number, item: any) => acc + (Number(item.nilai) || 0), 0);
-  const bteTotal = bteRincianTotal + bteBiayaLainTotal;
-  const finalTotal = bteTotal - dpTotal;
+        // Calculate totals (with dollar formatting flag if applicable)
+        const isBteDollar = (bteRow?.bteRincian || []).some((r: any) => r.useDollar);
+        const dpTotal = (dpRow?.dpRincian || []).reduce((acc: number, item: any) => acc + (Number(item.nilaiTotal) || 0), 0);
+        const bteRincianTotal = mealVal + pocketVal + transportVal + hotelVal + laundryVal + localTransVal + ticketVal + commsVal + airportVal;
+        const bteBiayaLainTotal = (bteRow?.bteBiayaLain || []).reduce((acc: number, item: any) => acc + (Number(item.nilai) || 0), 0);
+        const bteTotal = bteRincianTotal + bteBiayaLainTotal;
+        const finalTotal = bteTotal - dpTotal;
 
-  // Render Custom Cost Items
-  const etcRows = (bteRow?.bteBiayaLain || []).map((item: any, idx: number) => {
-    return `
+        // Render Custom Cost Items
+        const etcRows = (bteRow?.bteBiayaLain || []).map((item: any, idx: number) => {
+                return `
       <tr style="font-size:10px;">
         <td class="border border-dark text-center"></td>
         <td class="border border-dark text-center">X.3.${idx + 1}</td>
         <td class="border border-dark" colspan="3" style="padding-left:3%; text-transform: uppercase;">${esc(item.keterangan)}</td>
         <td class="border border-dark text-right" style="padding-right:3%;" colspan="2">${money(item.nilai, item.useDollar || isBteDollar)}</td>
       </tr>`;
-  }).join('');
+        }).join('');
 
-  return `
+        return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -204,7 +204,15 @@ export function bteLuarNegeriPrintTemplate(data: any) {
                 }
                 .no-print { margin: 0 auto 10px; text-align: right; }
                 .no-print button { padding: 6px 10px; border: 1px solid #0f766e; border-radius: 4px; background: #0f766e; color: white; font-weight: 700; cursor: pointer; }
-                @media print { .no-print { display: none; } }
+                @media print {
+                        .no-print {
+                                display: none;
+                        }
+                        body {
+                                padding-left: 8mm;
+                                padding-right: 8mm;
+                        }
+                }
         </style>
 </head>
 <body>
@@ -426,11 +434,28 @@ export function bteLuarNegeriPrintTemplate(data: any) {
                 </tr>
         </table>
         <script type="text/javascript">
-          window.addEventListener('load', () => {
-            setTimeout(() => {
-              window.print();
-            }, 500);
-          });
+                let printTriggered = false;
+
+                window.addEventListener('load', () => {
+                setTimeout(() => {
+                printTriggered = true;
+                window.print();
+                }, 500);
+                });
+
+                window.addEventListener('afterprint', () => {
+                if (!printTriggered) return;
+
+                setTimeout(() => {
+                if (window.opener) {
+                        window.close();
+                } else if (document.referrer) {
+                        window.location.href = document.referrer;
+                } else {
+                        history.back();
+                }
+                        }, 300);
+                });
         </script>
 </body>
 </html>

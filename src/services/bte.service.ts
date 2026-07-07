@@ -1,9 +1,15 @@
 // ─── BTE Service ───────────────────────────────────────────────────────────────
 import { db } from '../db/connection';
-import { bte, bteRincian, bteBiayaLain, bteApprovalLog, bto, localUserCache } from '../db/schema';
+import { bte, bteRincian, bteBiayaLain, bteApprovalLog, bto, btoApprovalLog, localUserCache } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { AppError } from '../utils/errorHandler';
 import { getGradeIdByLevel, hitungDurasiHariMalam, validateRincianAgainstPagu } from './pagu.service';
+
+function requireCatatanTindakan(action: string, catatan?: string) {
+  if (!catatan?.trim()) {
+    throw new AppError(`Catatan wajib diisi untuk aksi ${action}`, 400);
+  }
+}
 
 export async function getBteByBtoIdService(btoId: string) {
   const row = await db.query.bte.findFirst({
@@ -63,7 +69,7 @@ export async function createOrUpdateBteService(
 
   const canUserEdit =
     btoRow.status === 'REPORT_UPLOADED' ||
-    (btoRow.status === 'COMPLETED' && bteRow?.status === 'REVISION');
+    bteRow?.status === 'REVISION';
 
   if (!isAdmin && !canUserEdit) {
     throw new AppError('BTE hanya bisa diisi setelah laporan diupload atau saat revisi BTE', 400);
@@ -82,9 +88,14 @@ export async function createOrUpdateBteService(
     new Date(actualKembali),
   );
 
-  const userCache = await db.query.localUserCache.findFirst({
+  let userCache = await db.query.localUserCache.findFirst({
     where: eq(localUserCache.portalUserId, btoRow.employeeId),
   });
+  if (!userCache) {
+    userCache = await db.query.localUserCache.findFirst({
+      where: eq(localUserCache.employeeId, btoRow.employeeId),
+    });
+  }
   const gradeLevel = userCache?.gradeLevel ?? (btoRow.employeeId === actor.id ? actor.gradeLevel : null);
   const gradeId = gradeLevel != null ? await getGradeIdByLevel(gradeLevel) : null;
   if (!gradeId) throw new AppError('Grade karyawan tidak ditemukan di master', 400);
@@ -206,6 +217,9 @@ export async function submitBteService(bteId: string, actor: { id: string; nama:
   if (bteRow.status !== 'DRAFT' && bteRow.status !== 'REVISION') {
     throw new AppError(`Tidak bisa submit BTE dari status ${bteRow.status}`, 400);
   }
+  if (!bteRow.kuitansiPath) {
+    throw new AppError('Kuitansi/receipt BTE wajib diupload sebelum submit BTE', 400);
+  }
 
   await db.update(bte).set({
     status: 'ADMIN_REVIEW',
@@ -213,9 +227,9 @@ export async function submitBteService(bteId: string, actor: { id: string; nama:
     updatedAt: new Date(),
   }).where(eq(bte.id, bteId));
 
-  // Update BTO status to COMPLETED
+  // Update BTO status to admin BTE review
   await db.update(bto).set({
-    status: 'COMPLETED',
+    status: 'ADMIN_BTE_REVIEW',
     updatedAt: new Date(),
   }).where(eq(bto.id, bteRow.btoId));
 
@@ -224,7 +238,18 @@ export async function submitBteService(bteId: string, actor: { id: string; nama:
     aksi: 'submit',
     actorId: actor.id,
     actorNama: actor.nama,
-    catatan: 'BTE diajukan ke Admin',
+    catatan: 'BTE diajukan ke Admin untuk review',
+  });
+
+  await db.insert(btoApprovalLog).values({
+    btoId: bteRow.btoId,
+    tahap: 'bte',
+    aksi: 'submit',
+    actorId: actor.id,
+    actorNama: actor.nama,
+    statusDari: btoRow.status,
+    statusKe: 'ADMIN_BTE_REVIEW',
+    catatan: 'Realisasi BTE diajukan ke Admin untuk review',
   });
 }
 
@@ -234,6 +259,7 @@ export async function adminApproveBteService(bteId: string, action: 'approve' | 
   if (bteRow.status !== 'ADMIN_REVIEW' && bteRow.status !== 'SUBMITTED') {
     throw new AppError('BTE bukan dalam tahap review admin', 400);
   }
+  requireCatatanTindakan(action, catatan);
 
   const statusMap = {
     approve: 'PENDING_PAYMENT',
@@ -242,17 +268,38 @@ export async function adminApproveBteService(bteId: string, action: 'approve' | 
   } as const;
 
   const nextStatus = statusMap[action];
+  const btoStatusMap = {
+    approve: 'BTE_PAYMENT',
+    reject: 'REJECTED',
+    revision: 'REPORT_UPLOADED',
+  } as const;
 
   await db.update(bte).set({
     status: nextStatus,
     updatedAt: new Date(),
   }).where(eq(bte.id, bteId));
 
+  await db.update(bto).set({
+    status: btoStatusMap[action],
+    updatedAt: new Date(),
+  }).where(eq(bto.id, bteRow.btoId));
+
   await db.insert(bteApprovalLog).values({
     bteId,
     aksi: action,
     actorId: actor.id,
     actorNama: actor.nama,
+    catatan,
+  });
+
+  await db.insert(btoApprovalLog).values({
+    btoId: bteRow.btoId,
+    tahap: 'bte',
+    aksi: action,
+    actorId: actor.id,
+    actorNama: actor.nama,
+    statusDari: 'ADMIN_BTE_REVIEW',
+    statusKe: btoStatusMap[action],
     catatan,
   });
 
@@ -274,11 +321,27 @@ export async function markBtePaidService(bteId: string, actor: { id: string; nam
     updatedAt: new Date(),
   }).where(eq(bte.id, bteId));
 
+  await db.update(bto).set({
+    status: 'COMPLETED',
+    updatedAt: new Date(),
+  }).where(eq(bto.id, bteRow.btoId));
+
   await db.insert(bteApprovalLog).values({
     bteId,
     aksi: 'mark_paid',
     actorId: actor.id,
     actorNama: actor.nama,
+    catatan: 'Biaya perjalanan dinas sudah dibayarkan',
+  });
+
+  await db.insert(btoApprovalLog).values({
+    btoId: bteRow.btoId,
+    tahap: 'bte_payment',
+    aksi: 'mark_paid',
+    actorId: actor.id,
+    actorNama: actor.nama,
+    statusDari: 'BTE_PAYMENT',
+    statusKe: 'COMPLETED',
     catatan: 'Biaya perjalanan dinas sudah dibayarkan',
   });
 }

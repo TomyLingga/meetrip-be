@@ -206,10 +206,15 @@ export default async function masterRoutes(fastify: FastifyInstance) {
   });
 
   fastify.put('/config-sistem', { preHandler: [fastify.authenticateAdmin] }, async (req) => {
-    const { key, value } = z.object({ key: z.string(), value: z.string() }).parse(req.body);
-    const [updated] = await db.update(configSistem).set({ nilai: value, updatedAt: new Date() }).where(eq(configSistem.kunci, key)).returning();
+    const { key, value, label } = z.object({
+      key: z.string(),
+      value: z.string(),
+      label: z.string().optional(),
+    }).parse(req.body);
+    const values = { nilai: value, label, updatedAt: new Date() };
+    const [updated] = await db.update(configSistem).set(values).where(eq(configSistem.kunci, key)).returning();
     if (!updated) {
-      const [inserted] = await db.insert(configSistem).values({ kunci: key, nilai: value }).returning();
+      const [inserted] = await db.insert(configSistem).values({ kunci: key, nilai: value, label }).returning();
       return ok(inserted);
     }
     return ok(updated);

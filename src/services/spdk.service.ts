@@ -1,12 +1,106 @@
 // ─── SPDK Service ─────────────────────────────────────────────────────────────
 // ─── SPDK Service ─────────────────────────────────────────────────────────────
 import { db }          from '../db/connection'
-import { spdk, spdkApprovalLog, bto, btoApprovalLog, attendStamp, configApproverSpdk, localUserCache } from '../db/schema'
+import { spdk, spdkApprovalLog, bto, btoApprovalLog, attendStamp, configApproverSpdk, configSistem, localUserCache } from '../db/schema'
 import { eq, sql }     from 'drizzle-orm'
 import { AppError }    from '../utils/errorHandler'
 import { generateNomor, nomorSpdkFromBto } from '../utils/romanNumeral'
 import { haversineKm } from './geocoding.service'
 import { config as appConfig } from '../config/env'
+
+type PortalEmployeeLike = {
+  id?: string | null
+  employeeId?: string | null
+  namaLengkap?: string | null
+  jabatan?: string | null
+  gradeKode?: string | null
+  gradeLevel?: number | null
+  grade?: {
+    kode?: string | null
+    level?: number | null
+  } | null
+  atasanId?: string | null
+}
+
+function requireCatatanTindakan(aksi: string, catatan?: string) {
+  if (!catatan?.trim()) {
+    throw new AppError(`Catatan wajib diisi untuk aksi ${aksi}`, 400)
+  }
+}
+
+function isBom1Approver(employee?: PortalEmployeeLike | null) {
+  if (!employee) return false
+  const gradeKode = String(employee.gradeKode ?? employee.grade?.kode ?? '').trim().toUpperCase()
+  const gradeLevel = Number(employee.gradeLevel ?? employee.grade?.level)
+  return gradeKode === 'BOM-1' || gradeLevel === 13
+}
+
+async function fetchPortalEmployee(employeeId: string) {
+  const res = await fetch(
+    `${appConfig.portal.apiUrl}/api/sso/employees?id=${employeeId}`,
+    { headers: { 'x-internal': appConfig.portal.internalToken } }
+  )
+  if (!res.ok) return null
+  const data = await res.json() as { data?: PortalEmployeeLike[] }
+  return data.data?.[0] ?? null
+}
+
+async function resolvePortalUserId(employee: PortalEmployeeLike, fallbackEmployeeId?: string | null) {
+  let resolvedId = employee.id ?? null
+  const employeeId = employee.employeeId ?? fallbackEmployeeId ?? null
+
+  if (employeeId) {
+    const cache = await db.query.localUserCache.findFirst({
+      where: eq(localUserCache.employeeId, employeeId),
+    })
+    resolvedId = cache?.portalUserId ?? resolvedId
+  }
+
+  return resolvedId
+}
+
+export async function getAttendRadiusMeter() {
+  const [row] = await db.select().from(configSistem).where(eq(configSistem.kunci, 'attend_radius_meter')).limit(1)
+  const configuredRadius = Number(row?.nilai)
+  if (Number.isFinite(configuredRadius) && configuredRadius > 0) {
+    return configuredRadius
+  }
+  return appConfig.attend.radiusMeter
+}
+
+async function getUserIdentifierVariants(id?: string | null) {
+  const identifiers = new Set<string>()
+  if (id) identifiers.add(id)
+
+  if (id) {
+    const byPortalId = await db.query.localUserCache.findFirst({
+      where: eq(localUserCache.portalUserId, id),
+    })
+    if (byPortalId?.employeeId) identifiers.add(byPortalId.employeeId)
+
+    const byEmployeeId = await db.query.localUserCache.findFirst({
+      where: eq(localUserCache.employeeId, id),
+    })
+    if (byEmployeeId?.portalUserId) identifiers.add(byEmployeeId.portalUserId)
+  }
+
+  return Array.from(identifiers)
+}
+
+async function isActorBom1Approver(actor: { id: string; employeeId?: string | null; gradeLevel?: number | null }) {
+  if (Number(actor.gradeLevel) === 13) return true
+
+  const identifiers = [actor.id, actor.employeeId].filter((id): id is string => Boolean(id))
+  const cached = await Promise.all([
+    ...identifiers.map((id) => db.query.localUserCache.findFirst({ where: eq(localUserCache.portalUserId, id) })),
+    ...identifiers.map((id) => db.query.localUserCache.findFirst({ where: eq(localUserCache.employeeId, id) })),
+  ])
+
+  return cached.some((row) => {
+    const gradeKode = String(row?.gradeKode ?? '').trim().toUpperCase()
+    return gradeKode === 'BOM-1' || Number(row?.gradeLevel) === 13
+  })
+}
 
 export async function ensureApproverSpdkConfig() {
   const [row] = await db.select().from(configApproverSpdk).where(eq(configApproverSpdk.isActive, true)).limit(1)
@@ -50,44 +144,17 @@ export async function resolveSpdkApproverKabag(
     let iterations = 0
     while (currentEmployeeId && iterations < 5) {
       iterations++
-      const empRes = await fetch(
-        `${appConfig.portal.apiUrl}/api/sso/employees?id=${currentEmployeeId}`,
-        { headers: { 'x-internal': appConfig.portal.internalToken } }
-      )
-      if (!empRes.ok) break
-
-      const empData = await empRes.json() as { data: any[] }
-      const currentEmp = empData.data?.[0]
+      const currentEmp = await fetchPortalEmployee(currentEmployeeId)
       if (!currentEmp) break
 
       const atasanId = currentEmp.atasanId
       if (!atasanId) break
 
-      // Fetch the atasan to check unit type and title
-      const atasanRes = await fetch(
-        `${appConfig.portal.apiUrl}/api/sso/employees?id=${atasanId}`,
-        { headers: { 'x-internal': appConfig.portal.internalToken } }
-      )
-      if (!atasanRes.ok) break
-
-      const atasanData = await atasanRes.json() as { data: any[] }
-      const atasan = atasanData.data?.[0]
+      const atasan = await fetchPortalEmployee(atasanId)
       if (!atasan) break
 
-      const isKabagUnit = atasan.unitTipe === 'bagian'
-      const isKabagTitle = /kabag|kepala\s+bagian/i.test(atasan.jabatan || '')
-      if (isKabagUnit || isKabagTitle) {
-        const kabagPortalUserId = atasan.id ?? null
-        let resolvedId = kabagPortalUserId
-
-        const kabagEmployeeId = atasan.employeeId ?? atasanId ?? null
-        if (kabagEmployeeId) {
-          const kabagCache = await db.query.localUserCache.findFirst({
-            where: eq(localUserCache.employeeId, kabagEmployeeId),
-          })
-          resolvedId = kabagCache?.portalUserId ?? resolvedId
-        }
-
+      if (isBom1Approver(atasan)) {
+        const resolvedId = await resolvePortalUserId(atasan, atasanId)
         return {
           id: resolvedId ?? cfg?.fixedEmployeeId ?? null,
           nama: atasan.namaLengkap ?? null,
@@ -95,40 +162,6 @@ export async function resolveSpdkApproverKabag(
       }
 
       currentEmployeeId = atasanId
-    }
-
-    // Fallback to direct atasan
-    const fallbackRes = await fetch(
-      `${appConfig.portal.apiUrl}/api/sso/employees?id=${ownerEmployeeId}`,
-      { headers: { 'x-internal': appConfig.portal.internalToken } }
-    )
-    if (fallbackRes.ok) {
-      const fallbackData = await fallbackRes.json() as { data: any[] }
-      const directAtasanId = fallbackData.data?.[0]?.atasanId
-      if (directAtasanId) {
-        const directAtasanRes = await fetch(
-          `${appConfig.portal.apiUrl}/api/sso/employees?id=${directAtasanId}`,
-          { headers: { 'x-internal': appConfig.portal.internalToken } }
-        )
-        if (directAtasanRes.ok) {
-          const directAtasanData = await directAtasanRes.json() as { data: any[] }
-          const atasan = directAtasanData.data?.[0]
-          if (atasan) {
-            let resolvedId = atasan.id ?? null
-            const kabagEmployeeId = atasan.employeeId ?? directAtasanId ?? null
-            if (kabagEmployeeId) {
-              const kabagCache = await db.query.localUserCache.findFirst({
-                where: eq(localUserCache.employeeId, kabagEmployeeId),
-              })
-              resolvedId = kabagCache?.portalUserId ?? resolvedId
-            }
-            return {
-              id: resolvedId ?? cfg?.fixedEmployeeId ?? null,
-              nama: atasan.namaLengkap ?? null,
-            }
-          }
-        }
-      }
     }
 
     return { id: cfg?.fixedEmployeeId ?? null, nama: null }
@@ -146,6 +179,8 @@ export async function issueSpdkService(
   customNomorSpdk?: string,
   btoUpdateData?: any
 ) {
+  requireCatatanTindakan('issued', catatanAdmin)
+
   if (btoUpdateData && Object.keys(btoUpdateData).length > 0) {
     const cleanUpdate: any = { ...btoUpdateData, updatedAt: new Date() }
     if (cleanUpdate.estBerangkat) cleanUpdate.estBerangkat = new Date(cleanUpdate.estBerangkat)
@@ -166,7 +201,8 @@ export async function issueSpdkService(
   const approverKabagId = approverKabag.id
 
   // Cek apakah pemberi tugas = approver Kabag → auto approve
-  const autoApprove = btoRow.pemberiTugasId === approverKabagId
+  const approverIdentifiers = approverKabagId ? await getUserIdentifierVariants(approverKabagId) : []
+  const autoApprove = Boolean(btoRow.pemberiTugasId && approverIdentifiers.includes(btoRow.pemberiTugasId))
 
   // Generate nomor SPDK
   const now      = new Date()
@@ -205,7 +241,7 @@ export async function issueSpdkService(
     actorId:    actor.id,
     actorNama:  actor.nama,
     statusDari: btoRow.status,
-    statusKe:   'KABAG_REVIEW',
+    statusKe:   btoNextStatus,
     catatan:    catatanAdmin || `SPDK diterbitkan dengan nomor ${nomorSpdk}`,
   })
 
@@ -240,11 +276,41 @@ export async function issueSpdkService(
   return { ...inserted, autoApproved: autoApprove }
 }
 
+export async function rejectSpdkDraftService(
+  btoId: string,
+  actor: { id: string; nama: string },
+  catatan?: string,
+) {
+  requireCatatanTindakan('reject', catatan)
+
+  const [btoRow] = await db.select().from(bto).where(eq(bto.id, btoId)).limit(1)
+  if (!btoRow) throw new AppError('BTO tidak ditemukan', 404)
+  if (btoRow.status !== 'SPDK_DRAFT') throw new AppError('BTO belum di tahap penerbitan SPDK', 400)
+
+  await db.update(bto).set({
+    status: 'REJECTED',
+    updatedAt: new Date(),
+  }).where(eq(bto.id, btoId))
+
+  await db.insert(btoApprovalLog).values({
+    btoId,
+    tahap: 'admin_spdk',
+    aksi: 'reject',
+    actorId: actor.id,
+    actorNama: actor.nama,
+    statusDari: btoRow.status,
+    statusKe: 'REJECTED',
+    catatan,
+  })
+
+  return { status: 'REJECTED' }
+}
+
 // ─── Kabag Approve/Reject SPDK ───────────────────────────────────────────────
 export async function kabagApproveSpdkService(
   spdkId: string,
   aksi: 'approve' | 'reject',
-  actor: { id: string; employeeId?: string | null; nama: string },
+  actor: { id: string; employeeId?: string | null; gradeLevel?: number | null; nama: string },
   isAdmin: boolean,
   catatan?: string,
 ) {
@@ -252,9 +318,14 @@ export async function kabagApproveSpdkService(
   if (!spdkRow) throw new AppError('SPDK tidak ditemukan', 404)
   if (spdkRow.status !== 'KABAG_REVIEW') throw new AppError('Bukan tahap Kabag review', 400)
   const actorIdentifiers = [actor.id, actor.employeeId].filter((id): id is string => Boolean(id))
-  if (!isAdmin && (!spdkRow.approverKabagId || !actorIdentifiers.includes(spdkRow.approverKabagId))) {
+  const actorIsBom1 = await isActorBom1Approver(actor)
+  if (!isAdmin && spdkRow.approverKabagId && !actorIdentifiers.includes(spdkRow.approverKabagId)) {
     throw new AppError('Anda bukan approver SPDK ini', 403)
   }
+  if (!isAdmin && !spdkRow.approverKabagId && !actorIsBom1) {
+    throw new AppError('Anda bukan approver SPDK ini', 403)
+  }
+  requireCatatanTindakan(aksi, catatan)
 
   const nextStatusSpdk = aksi === 'approve' ? 'APPROVED' : 'REJECTED'
   const nextStatusBto  = aksi === 'approve' ? 'ACTIVE'   : 'REJECTED'
@@ -262,7 +333,8 @@ export async function kabagApproveSpdkService(
 
   await db.update(spdk).set({
     status: nextStatusSpdk,
-    approverKabagId: spdkRow.approverKabagId === actor.employeeId ? actor.id : spdkRow.approverKabagId,
+    approverKabagId: spdkRow.approverKabagId || actor.id,
+    approverKabagNama: spdkRow.approverKabagNama || actor.nama,
     updatedAt: now,
   }).where(eq(spdk.id, spdkId))
   await db.update(bto).set({ status: nextStatusBto, updatedAt: now }).where(eq(bto.id, spdkRow.btoId))
@@ -309,6 +381,7 @@ export async function attendStampService(
   let jarakM   = 0
 
   let isValid  = false
+  const radiusMeter = await getAttendRadiusMeter()
 
   if (isAdminOverride) {
     // Admin override: koordinat diset ke tujuan BTO
@@ -320,10 +393,9 @@ export async function attendStampService(
     if (finalLat === null || finalLng === null) throw new AppError('Koordinat stamp wajib diisi', 400)
     const jarakKm  = haversineKm(Number(btoRow.tujuanLat), Number(btoRow.tujuanLng), finalLat, finalLng)
     jarakM   = jarakKm * 1000
-    // Baca radius dari config
-    isValid  = jarakM <= appConfig.attend.radiusMeter
+    isValid  = jarakM <= radiusMeter
     if (!isValid) {
-      throw new AppError(`Geofence validation failed. Anda berada ${jarakM.toFixed(0)}m dari lokasi tujuan, sedangkan batas maksimum adalah ${appConfig.attend.radiusMeter}m.`, 400)
+      throw new AppError(`Geofence validation failed. Anda berada ${jarakM.toFixed(0)}m dari lokasi tujuan, sedangkan batas maksimum adalah ${radiusMeter}m.`, 400)
     }
   }
 
@@ -343,7 +415,20 @@ export async function attendStampService(
   // Update status BTO → ATTENDED
   await db.update(bto).set({ status: 'ATTENDED', updatedAt: new Date() }).where(eq(bto.id, btoId))
 
-  return { ...stamp, isValid, jarakMeter: jarakM }
+  await db.insert(btoApprovalLog).values({
+    btoId,
+    tahap: 'absen',
+    aksi: isAdminOverride ? 'override_absen' : 'absen',
+    actorId: actor.id,
+    actorNama: actor.nama,
+    statusDari: 'ACTIVE',
+    statusKe: 'ATTENDED',
+    catatan: isAdminOverride
+      ? 'Absen dioverride oleh admin'
+      : `Absen berhasil. Jarak ${jarakM.toFixed(0)} meter dari tujuan, radius ${radiusMeter} meter.`,
+  })
+
+  return { ...stamp, isValid, jarakMeter: jarakM, radiusMeter }
 }
 
 // ─── Update SPDK (Admin Only) ────────────────────────────────────────────────

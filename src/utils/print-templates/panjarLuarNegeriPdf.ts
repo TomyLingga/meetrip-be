@@ -162,7 +162,15 @@ export function panjarLuarNegeriPrintTemplate(data: any) {
                 }
                 .no-print { margin: 0 auto 10px; text-align: right; }
                 .no-print button { padding: 6px 10px; border: 1px solid #0f766e; border-radius: 4px; background: #0f766e; color: white; font-weight: 700; cursor: pointer; }
-                @media print { .no-print { display: none; } }
+                @media print {
+                        .no-print {
+                                display: none;
+                        }
+                        body {
+                                padding-left: 8mm;
+                                padding-right: 8mm;
+                        }
+                }
         </style>
 </head>
 <body>
