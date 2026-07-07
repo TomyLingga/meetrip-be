@@ -10,7 +10,10 @@ const envSchema = z.object({
   DB_USER: z.string(),
   DB_PASSWORD: z.string(),
 
-  PORT: z.coerce.number().default(3003),
+  PORT: z.preprocess((value) => {
+    const port = Number(value)
+    return Number.isFinite(port) && port > 0 ? port : undefined
+  }, z.number().int().min(1).max(65535).default(3003)),
   HOST: z.string().default('0.0.0.0'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 

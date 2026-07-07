@@ -74,13 +74,16 @@ async function bootstrap() {
   await fastify.register(portalUserRoutes, { prefix: '/api/portal/users' });
 
   // ─── Health check ───────────────────────────────────────────────────────────
-  fastify.get('/health', async () => ({
+  const healthPayload = () => ({
     status: 'ok',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
     name: 'MeeTrip API',
     version: '1.0.0',
-  }));
+  });
+
+  fastify.get('/', async () => healthPayload());
+  fastify.get('/health', async () => healthPayload());
 
   return fastify;
 }
