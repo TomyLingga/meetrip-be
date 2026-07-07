@@ -67,6 +67,21 @@ export async function createOrUpdateBteService(
     where: eq(bte.btoId, btoId),
   });
 
+  if (!isAdmin && bteRow && (bteRow.status === 'ADMIN_REVIEW' || bteRow.status === 'SUBMITTED')) {
+    if (btoRow.status !== 'ADMIN_BTE_REVIEW') {
+      await db.update(bto).set({
+        status: 'ADMIN_BTE_REVIEW',
+        updatedAt: new Date(),
+      }).where(eq(bto.id, btoId));
+    }
+    return {
+      bteId: bteRow.id,
+      totalIdr: Number(bteRow.totalIdr || 0),
+      totalUsd: Number(bteRow.totalUsd || 0),
+      alreadySubmitted: true,
+    };
+  }
+
   const canUserEdit =
     btoRow.status === 'REPORT_UPLOADED' ||
     bteRow?.status === 'REVISION';
@@ -214,11 +229,23 @@ export async function submitBteService(bteId: string, actor: { id: string; nama:
   if (!isAdmin && btoRow.employeeId !== actor.id) {
     throw new AppError('Tidak diizinkan submit BTE ini', 403);
   }
+  if (bteRow.status === 'ADMIN_REVIEW' || bteRow.status === 'SUBMITTED') {
+    if (btoRow.status !== 'ADMIN_BTE_REVIEW') {
+      await db.update(bto).set({
+        status: 'ADMIN_BTE_REVIEW',
+        updatedAt: new Date(),
+      }).where(eq(bto.id, bteRow.btoId));
+    }
+    return { status: 'ADMIN_REVIEW', btoStatus: 'ADMIN_BTE_REVIEW', alreadySubmitted: true };
+  }
   if (bteRow.status !== 'DRAFT' && bteRow.status !== 'REVISION') {
     throw new AppError(`Tidak bisa submit BTE dari status ${bteRow.status}`, 400);
   }
   if (!bteRow.kuitansiPath) {
     throw new AppError('Kuitansi/receipt BTE wajib diupload sebelum submit BTE', 400);
+  }
+  if (!bteRow.laporanPath) {
+    throw new AppError('Laporan Kegiatan/Perjalanan wajib diupload sebelum submit BTE', 400);
   }
 
   await db.update(bte).set({
@@ -251,6 +278,8 @@ export async function submitBteService(bteId: string, actor: { id: string; nama:
     statusKe: 'ADMIN_BTE_REVIEW',
     catatan: 'Realisasi BTE diajukan ke Admin untuk review',
   });
+
+  return { status: 'ADMIN_REVIEW', btoStatus: 'ADMIN_BTE_REVIEW', alreadySubmitted: false };
 }
 
 export async function adminApproveBteService(bteId: string, action: 'approve' | 'reject' | 'revision', actor: { id: string; nama: string }, catatan?: string) {
@@ -271,7 +300,7 @@ export async function adminApproveBteService(bteId: string, action: 'approve' | 
   const btoStatusMap = {
     approve: 'BTE_PAYMENT',
     reject: 'REJECTED',
-    revision: 'REPORT_UPLOADED',
+    revision: 'REVISION_BTE',
   } as const;
 
   await db.update(bte).set({

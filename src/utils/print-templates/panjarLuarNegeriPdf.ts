@@ -157,7 +157,7 @@ export function panjarLuarNegeriPrintTemplate(data: any) {
                         color: #555;
                         line-height: 1.3;
                         border-top: 1px solid #ddd;
-                        padding-top: 8px;
+                        padding: 8px 12px 0;
                         text-align: center;
                 }
                 .no-print { margin: 0 auto 10px; text-align: right; }
@@ -295,7 +295,7 @@ export function panjarLuarNegeriPrintTemplate(data: any) {
                                 ${financeQr ? `
                                 <img src="${financeQr}" style="width: 65px; height: 65px; object-fit: contain; margin-bottom: 5px;" />
                                 ` : `
-                                <div style="height: 65px; border: 1px dashed #ccc; width: 65px; margin-bottom: 5px; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 9px;">Pending</div>
+                                <div style="height: 65px; border: 1px dashed #777; width: 65px; margin-bottom: 5px; display: flex; align-items: center; justify-content: center; color: #777; font-size: 9px; font-weight: 800;">QR</div>
                                 `}
                                 <p style="margin-top: 5px;"><strong>GA Administrator</strong></p>
                         </td>

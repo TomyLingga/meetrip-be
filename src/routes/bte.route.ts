@@ -203,8 +203,8 @@ export default async function bteRoutes(fastify: FastifyInstance) {
     const { id } = req.params as { id: string };
     const actor = { id: req.user.sub, nama: req.user.nama || '' };
     const isAdmin = ['super_admin', 'admin'].includes(req.user.role || '');
-    await submitBteService(id, actor, isAdmin);
-    return reply.send(ok({ message: 'BTE diajukan' }));
+    const result = await submitBteService(id, actor, isAdmin);
+    return reply.send(ok({ message: 'BTE diajukan', ...result }));
   });
 
   /** POST /api/bte/review/:id — Compatibility endpoint for admin BTE review */

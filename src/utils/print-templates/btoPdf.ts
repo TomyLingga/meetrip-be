@@ -1,7 +1,7 @@
 export function btoPrintTemplate(btoRow: any, owner: any, pemberiTugasRow: any, sdmLog: any, sdmName: string, LOGO_SRC: string, esc: any, dateText: any, durationDays: any, employeeQr?: string | null, ptQr?: string | null, sdmQr?: string | null) {
         const signatureMark = (qr?: string | null) => qr
                 ? `<img src="${qr}" class="signature-qr" />`
-                : `<div class="signature-check">&#10003;</div>`;
+                : `<div class="signature-placeholder">QR</div>`;
 
         return `
 <!DOCTYPE html>
@@ -173,11 +173,18 @@ export function btoPrintTemplate(btoRow: any, owner: any, pemberiTugasRow: any, 
                         height: 72px;
                         object-fit: contain;
                 }
-                .signature-check {
+                .signature-placeholder {
                         font-family: Arial, Helvetica, sans-serif;
-                        font-size: 86px;
+                        width: 72px;
+                        height: 72px;
+                        border: 1px dashed #666;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: #777;
+                        font-size: 11px;
                         line-height: 1;
-                        font-weight: 900;
+                        font-weight: 800;
                 }
                 .signature-name {
                         text-decoration: underline;
@@ -321,13 +328,13 @@ export function btoPrintTemplate(btoRow: any, owner: any, pemberiTugasRow: any, 
                                 <div>Pelaksana Tugas</div>
                                 <div class="signature-box">${signatureMark(employeeQr)}</div>
                                 <div class="signature-name">${esc(btoRow.employeeNama ?? owner?.nama)}</div>
-                                <div class="signature-position">${esc(owner?.gradeKode || '-')} ${esc(owner?.unitNama || '')}</div>
+                                <div class="signature-position">${esc(owner?.jabatan || `${owner?.gradeKode || '-'} ${owner?.unitNama || ''}`.trim())}</div>
                         </td>
                         <td class="signature-cell">
                                 <div>Pemberi Tugas</div>
                                 <div class="signature-box">${signatureMark(ptQr)}</div>
                                 <div class="signature-name">${esc(btoRow.pemberiTugasNama)}</div>
-                                <div class="signature-position">${esc(pemberiTugasRow?.gradeKode || 'Atasan')} ${esc(pemberiTugasRow?.unitNama || '')}</div>
+                                <div class="signature-position">${esc(pemberiTugasRow?.jabatan || `${pemberiTugasRow?.gradeKode || 'Atasan'} ${pemberiTugasRow?.unitNama || ''}`.trim())}</div>
                         </td>
                         <td class="signature-cell">
                                 <div>Diketahui</div>

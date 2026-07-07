@@ -25,6 +25,7 @@ export const btoStatusEnum = pgEnum('bto_status', [
   'BTE_PAYMENT',       // BTE disetujui, menunggu pembayaran
   'COMPLETED',         // pembayaran BTE selesai
   'REJECTED',          // ditolak di tahap mana pun
+  'REVISION_BTE',      // revisi BTE
 ])
 
 export const wilayahTipeEnum = pgEnum('wilayah_tipe', [

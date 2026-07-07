@@ -88,18 +88,40 @@ async function getUserIdentifierVariants(id?: string | null) {
 }
 
 async function isActorBom1Approver(actor: { id: string; employeeId?: string | null; gradeLevel?: number | null }) {
-  if (Number(actor.gradeLevel) === 13) return true
-
   const identifiers = [actor.id, actor.employeeId].filter((id): id is string => Boolean(id))
   const cached = await Promise.all([
     ...identifiers.map((id) => db.query.localUserCache.findFirst({ where: eq(localUserCache.portalUserId, id) })),
     ...identifiers.map((id) => db.query.localUserCache.findFirst({ where: eq(localUserCache.employeeId, id) })),
   ])
 
-  return cached.some((row) => {
+  const hasBom1Kode = cached.some((row) => {
     const gradeKode = String(row?.gradeKode ?? '').trim().toUpperCase()
-    return gradeKode === 'BOM-1' || Number(row?.gradeLevel) === 13
+    return gradeKode === 'BOM-1'
   })
+  if (hasBom1Kode) return true
+
+  try {
+    const portalRes = await fetch(`${appConfig.portal.apiUrl}/api/sso/grades`, {
+      headers: { 'x-internal': appConfig.portal.internalToken },
+    })
+    if (portalRes.ok) {
+      const body = await portalRes.json() as { data?: Array<{ kode?: string | null; level?: number | null }> }
+      const bom1Levels = new Set(
+        (body.data ?? [])
+          .filter((grade) => String(grade.kode ?? '').trim().toUpperCase() === 'BOM-1')
+          .map((grade) => Number(grade.level))
+          .filter((level) => Number.isFinite(level))
+      )
+      if (bom1Levels.size > 0) {
+        if (bom1Levels.has(Number(actor.gradeLevel))) return true
+        if (cached.some((row) => bom1Levels.has(Number(row?.gradeLevel)))) return true
+      }
+    }
+  } catch (err) {
+    console.error('Gagal mengambil mapping grade BOM-1 dari Portal:', err)
+  }
+
+  return false
 }
 
 export async function ensureApproverSpdkConfig() {

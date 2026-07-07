@@ -8,11 +8,15 @@ export function spdkPrintTemplate(
         esc: (val: any) => string,
         dateText: (date: any) => string,
         durationDays: (d1: any, d2: any) => number,
-        kabagQr?: string | null
+        kabagQr?: string | null,
+        destinationQr?: string | null
 ) {
         const signatureMark = kabagQr
                 ? `<img src="${kabagQr}" class="signature-qr" />`
-                : `<div class="signature-check">&#10003;</div>`;
+                : `<div class="signature-placeholder">QR</div>`;
+        const destinationQrMark = destinationQr
+                ? `<img src="${destinationQr}" class="destination-qr" />`
+                : `<div class="destination-placeholder">QR Lokasi Tujuan</div>`;
 
         return `
 <!DOCTYPE html>
@@ -166,15 +170,15 @@ export function spdkPrintTemplate(
                         width: 320px;
                         height: 170px;
                         border: 1px solid #555;
-                        position: relative;
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        gap: 8px;
                 }
                 .stempel-label {
-                        position: absolute;
-                        bottom: 24px;
-                        left: 0;
-                        right: 0;
                         text-align: center;
-                        font-size: 13px;
+                        font-size: 12px;
                         font-weight: 800;
                         font-style: italic;
                         text-decoration: underline;
@@ -201,10 +205,34 @@ export function spdkPrintTemplate(
                         height: 72px;
                         object-fit: contain;
                 }
-                .signature-check {
-                        font-size: 74px;
+                .signature-placeholder {
+                        width: 72px;
+                        height: 72px;
+                        border: 1px dashed #666;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: #777;
+                        font-size: 11px;
                         line-height: 1;
-                        font-weight: 900;
+                        font-weight: 800;
+                }
+                .destination-qr {
+                        width: 92px;
+                        height: 92px;
+                        object-fit: contain;
+                }
+                .destination-placeholder {
+                        width: 92px;
+                        height: 92px;
+                        border: 1px dashed #666;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: #777;
+                        font-size: 10px;
+                        text-align: center;
+                        padding: 8px;
                 }
                 .signature-name {
                         font-size: 14px;
@@ -217,8 +245,10 @@ export function spdkPrintTemplate(
                 }
                 .address-footer {
                         margin-top: 60px;
+                        padding-left: 14px;
+                        padding-right: 14px;
                         font-family: "Times New Roman", Times, serif;
-                        font-size: 12px;
+                        font-size: 10px;
                         line-height: 1.15;
                         color: #555;
                 }
@@ -318,13 +348,13 @@ export function spdkPrintTemplate(
                         <td></td>
                         <td>2.</td>
                         <td>Pangkat/Jabatan</td>
-                        <td>: ${esc(owner?.gradeKode ?? '-')}</td>
+                        <td>: ${esc(owner?.jabatan ?? '-')}</td>
                 </tr>
                 <tr>
                         <td></td>
                         <td>3.</td>
                         <td>Golongan</td>
-                        <td>: -</td>
+                        <td>: ${esc(owner?.gradeKode ?? '-')}</td>
                 </tr>
                 <tr>
                         <td></td>
@@ -398,7 +428,8 @@ export function spdkPrintTemplate(
                 <tr>
                         <td width="45%">
                                 <div class="stempel-box">
-                                        <div class="stempel-label">Stempel Instansi atau Lembaga Tujuan</div>
+                                        ${destinationQrMark}
+                                        <div class="stempel-label">QR Lokasi Tujuan Dinas</div>
                                 </div>
                         </td>
                         <td width="10%"></td>

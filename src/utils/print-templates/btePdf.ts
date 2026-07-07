@@ -14,6 +14,9 @@ export function btePrintTemplate(
 ) {
   const departureTime = btoRow.estBerangkat ? new Date(btoRow.estBerangkat).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', timeZone: 'Asia/Jakarta'}).replace('.', ':') : '07:00';
   const arrivalTime = btoRow.estKembali ? new Date(btoRow.estKembali).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', timeZone: 'Asia/Jakarta'}).replace('.', ':') : '23:00';
+  const adminQrMark = adminQr
+    ? `<img src="${adminQr}" class="personalia-qr" />`
+    : `<div class="personalia-qr-placeholder">QR</div>`;
 
   const jobLevelName = (level: number) => {
     switch (level) {
@@ -227,17 +230,39 @@ export function btePrintTemplate(
                 }
                 .sign-row {
                         text-align: right;
-                        margin-top: 40px;
+                        margin-top: 8px;
                         padding-right: 40px;
                         font-size: 14px;
                 }
+                .personalia-qr-wrap {
+                        display: flex;
+                        justify-content: flex-end;
+                        padding-right: 84px;
+                        margin-top: 24px;
+                }
+                .personalia-qr,
+                .personalia-qr-placeholder {
+                        width: 62px;
+                        height: 62px;
+                        object-fit: contain;
+                }
+                .personalia-qr-placeholder {
+                        border: 1px dashed #777;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: #777;
+                        font-size: 10px;
+                        font-weight: 800;
+                }
                 .address-footer {
                         position: fixed;
-                        left: 0;
-                        right: 0;
+                        left: 8mm;
+                        right: 8mm;
                         bottom: 0;
+                        padding: 0 10px 2px;
                         font-family: "Times New Roman", Times, serif;
-                        font-size: 12px;
+                        font-size: 9.5px;
                         line-height: 1.15;
                         color: #555;
                 }
@@ -476,6 +501,7 @@ export function btePrintTemplate(
                         </tr>
                 </table>
 
+                <div class="personalia-qr-wrap">${adminQrMark}</div>
                 <div class="sign-row">Sign by Personalia: &nbsp;<strong><em>GA Administrator</em></strong></div>
         </div>
 

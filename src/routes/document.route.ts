@@ -2,6 +2,8 @@ import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { and, desc, eq } from 'drizzle-orm'
 import QRCode from 'qrcode'
+import fs from 'fs'
+import path from 'path'
 import { db } from '../db/connection'
 import {
   attendStamp,
@@ -17,6 +19,7 @@ import {
   refTransport,
 } from '../db/schema'
 import { AppError } from '../utils/errorHandler'
+import { config } from '../config/env'
 import { btoPrintTemplate } from '../utils/print-templates/btoPdf'
 import { spdkPrintTemplate } from '../utils/print-templates/spdkPdf'
 import { panjarPrintTemplate } from '../utils/print-templates/panjarPdf'
@@ -35,7 +38,14 @@ type SpdkLog = typeof spdkApprovalLog.$inferSelect
 type BteLog = typeof bteApprovalLog.$inferSelect
 type AttendStampRow = typeof attendStamp.$inferSelect
 
-const LOGO_SRC = '/uploads/documents/inl.png'
+let LOGO_SRC = ''
+try {
+  const logoPath = path.join(process.cwd(), 'uploads', 'documents', 'inl.png')
+  const logoBase64 = fs.readFileSync(logoPath).toString('base64')
+  LOGO_SRC = `data:image/png;base64,${logoBase64}`
+} catch (e) {
+  LOGO_SRC = ''
+}
 
 const monthFormatter = new Intl.DateTimeFormat('id-ID', {
   day: 'numeric',
@@ -99,7 +109,7 @@ async function qrDataUrl(payload: Record<string, unknown> | null) {
   return QRCode.toDataURL(JSON.stringify(payload), {
     errorCorrectionLevel: 'M',
     margin: 1,
-    width: 118,
+    width: 300,
   })
 }
 
@@ -108,8 +118,23 @@ async function qrTextDataUrl(text: string | null) {
   return QRCode.toDataURL(text, {
     errorCorrectionLevel: 'M',
     margin: 1,
-    width: 118,
+    width: 300,
   })
+}
+
+async function fetchPortalEmployee(employeeId?: string | null) {
+  if (!employeeId) return null
+  try {
+    const res = await fetch(`${config.portal.apiUrl}/api/sso/employees?id=${employeeId}`, {
+      headers: { 'x-internal-token': config.portal.internalToken },
+    })
+    if (!res.ok) return null
+    const body: any = await res.json()
+    const data = Array.isArray(body?.data) ? body.data[0] : body?.data
+    return data || null
+  } catch {
+    return null
+  }
 }
 
 function pickLog<T extends { aksi: string; tahap?: string | null }>(
@@ -274,8 +299,18 @@ async function renderBto(btoRow: BtoRow, owner: any, logs: BtoLog[]) {
   
   let ptRow = null
   if (btoRow.pemberiTugasId) {
-    const cached = await db.select().from(localUserCache).where(eq(localUserCache.id, btoRow.pemberiTugasId)).limit(1)
-    ptRow = cached[0] || null
+    const cachedByPortal = await db.select().from(localUserCache).where(eq(localUserCache.portalUserId, btoRow.pemberiTugasId)).limit(1)
+    const cachedByEmployee = cachedByPortal[0] ? [] : await db.select().from(localUserCache).where(eq(localUserCache.employeeId, btoRow.pemberiTugasId)).limit(1)
+    ptRow = cachedByPortal[0] || cachedByEmployee[0] || null
+    const ptEmployee = await fetchPortalEmployee(ptRow?.employeeId || btoRow.pemberiTugasId)
+    if (ptEmployee) {
+      ptRow = {
+        ...ptRow,
+        jabatan: ptEmployee.jabatan ?? null,
+        gradeKode: ptEmployee.gradeKode ?? ptEmployee.grade?.kode ?? ptRow?.gradeKode,
+        unitNama: ptEmployee.unitNama ?? ptEmployee.organisasi?.nama ?? ptRow?.unitNama,
+      }
+    }
   }
   
   const sdmName = sdmLog ? sdmLog.actorNama : ''
@@ -315,7 +350,20 @@ async function renderSpdk(
     kabagQr = await qrTextDataUrl(kabagQrText)
   }
 
-  return spdkPrintTemplate(btoRow, owner, spdkRow, logs, stamp, LOGO_SRC, esc, dateText, durationDays, kabagQr)
+  const destinationQr = await qrDataUrl({
+    document: 'SPDK',
+    type: 'destination_attendance_stamp',
+    employeeName: btoRow.employeeNama ?? owner?.nama,
+    destinationName: btoRow.tujuanNama,
+    destinationAddress: btoRow.tujuanAlamat,
+    destinationLat: btoRow.tujuanLat,
+    destinationLng: btoRow.tujuanLng,
+    stampedLat: stamp?.stampLat ?? null,
+    stampedLng: stamp?.stampLng ?? null,
+    timestamp: isoText((stamp as any)?.stamped_at) ?? new Date().toISOString(),
+  })
+
+  return spdkPrintTemplate(btoRow, owner, spdkRow, logs, stamp, LOGO_SRC, esc, dateText, durationDays, kabagQr, destinationQr)
 }
 
 async function renderDp(btoRow: BtoRow, owner: any, dpRow: any, logs: DpLog[]) {
@@ -438,14 +486,31 @@ async function loadBtoContext(btoId: string) {
   const owner = await db.query.localUserCache.findFirst({
     where: eq(localUserCache.portalUserId, btoRow.employeeId),
   })
-  return { btoRow, owner }
+  const portalEmployee = await fetchPortalEmployee(owner?.employeeId || btoRow.employeeId)
+  return {
+    btoRow,
+    owner: portalEmployee ? {
+      ...owner,
+      jabatan: portalEmployee.jabatan ?? owner?.role ?? null,
+      gradeKode: portalEmployee.gradeKode ?? portalEmployee.grade?.kode ?? owner?.gradeKode,
+      gradeLevel: portalEmployee.gradeLevel ?? portalEmployee.grade?.level ?? owner?.gradeLevel,
+      unitNama: portalEmployee.unitNama ?? portalEmployee.organisasi?.nama ?? owner?.unitNama,
+    } : owner,
+  }
 }
 
-function assertDocumentAccess(btoRow: BtoRow, user: any, spdkRow?: typeof spdkTable.$inferSelect | null) {
+async function assertDocumentAccess(btoRow: BtoRow, user: any, passedSpdkRow?: typeof spdkTable.$inferSelect | null) {
   const roles = (user.role ?? '').split(',')
   if (roles.some((r: string) => ['super_admin', 'admin', 'sdm'].includes(r))) return
   const userIds = [user.sub, user.employeeId].filter(Boolean)
   if (userIds.includes(btoRow.employeeId) || userIds.includes(btoRow.pemberiTugasId ?? '')) return
+  
+  let spdkRow = passedSpdkRow;
+  if (spdkRow === undefined) {
+    const [row] = await db.select().from(spdkTable).where(eq(spdkTable.btoId, btoRow.id)).limit(1)
+    spdkRow = row
+  }
+  
   if (spdkRow && userIds.includes(spdkRow.approverKabagId ?? '')) return
   throw new AppError('Tidak diizinkan membuka dokumen ini', 403)
 }
@@ -454,7 +519,7 @@ export default async function documentRoutes(fastify: FastifyInstance) {
   fastify.get('/bto/:btoId', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { btoId } = paramsSchema.parse(req.params)
     const { btoRow, owner } = await loadBtoContext(btoId)
-    assertDocumentAccess(btoRow, req.user)
+    await assertDocumentAccess(btoRow, req.user)
     const logs = await db.select().from(btoApprovalLog)
       .where(eq(btoApprovalLog.btoId, btoId))
       .orderBy(desc(btoApprovalLog.createdAt))
@@ -465,7 +530,7 @@ export default async function documentRoutes(fastify: FastifyInstance) {
   fastify.get('/bto/:btoId/pdf', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { btoId } = paramsSchema.parse(req.params)
     const { btoRow, owner } = await loadBtoContext(btoId)
-    assertDocumentAccess(btoRow, req.user)
+    await assertDocumentAccess(btoRow, req.user)
     const logs = await db.select().from(btoApprovalLog)
       .where(eq(btoApprovalLog.btoId, btoId))
       .orderBy(desc(btoApprovalLog.createdAt))
@@ -477,7 +542,7 @@ export default async function documentRoutes(fastify: FastifyInstance) {
     const { btoRow, owner } = await loadBtoContext(btoId)
     const [spdkRow] = await db.select().from(spdkTable).where(eq(spdkTable.btoId, btoId)).limit(1)
     if (!spdkRow) throw new AppError('SPDK belum diterbitkan untuk BTO ini', 404)
-    assertDocumentAccess(btoRow, req.user, spdkRow)
+    await assertDocumentAccess(btoRow, req.user, spdkRow)
     const logs = await db.select().from(spdkApprovalLog)
       .where(eq(spdkApprovalLog.spdkId, spdkRow.id))
       .orderBy(desc(spdkApprovalLog.createdAt))
@@ -494,7 +559,7 @@ export default async function documentRoutes(fastify: FastifyInstance) {
     const { btoRow, owner } = await loadBtoContext(btoId)
     const [spdkRow] = await db.select().from(spdkTable).where(eq(spdkTable.btoId, btoId)).limit(1)
     if (!spdkRow) throw new AppError('SPDK belum diterbitkan untuk BTO ini', 404)
-    assertDocumentAccess(btoRow, req.user, spdkRow)
+    await assertDocumentAccess(btoRow, req.user, spdkRow)
     const logs = await db.select().from(spdkApprovalLog)
       .where(eq(spdkApprovalLog.spdkId, spdkRow.id))
       .orderBy(desc(spdkApprovalLog.createdAt))
@@ -508,7 +573,7 @@ export default async function documentRoutes(fastify: FastifyInstance) {
   fastify.get('/dp/:btoId', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { btoId } = paramsSchema.parse(req.params)
     const { btoRow, owner } = await loadBtoContext(btoId)
-    assertDocumentAccess(btoRow, req.user)
+    await assertDocumentAccess(btoRow, req.user)
     const dpRow = await db.query.dp.findFirst({
       where: eq(dpTable.btoId, btoId),
       with: { dpRincian: true },
@@ -524,7 +589,7 @@ export default async function documentRoutes(fastify: FastifyInstance) {
   fastify.get('/dp/:btoId/pdf', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { btoId } = paramsSchema.parse(req.params)
     const { btoRow, owner } = await loadBtoContext(btoId)
-    assertDocumentAccess(btoRow, req.user)
+    await assertDocumentAccess(btoRow, req.user)
     const dpRow = await db.query.dp.findFirst({
       where: eq(dpTable.btoId, btoId),
       with: { dpRincian: true },
@@ -539,7 +604,7 @@ export default async function documentRoutes(fastify: FastifyInstance) {
   fastify.get('/bte/:btoId', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { btoId } = paramsSchema.parse(req.params)
     const { btoRow, owner } = await loadBtoContext(btoId)
-    assertDocumentAccess(btoRow, req.user)
+    await assertDocumentAccess(btoRow, req.user)
     const bteRow = await db.query.bte.findFirst({
       where: eq(bteTable.btoId, btoId),
       with: { bteRincian: true, bteBiayaLain: true },
@@ -555,7 +620,7 @@ export default async function documentRoutes(fastify: FastifyInstance) {
   fastify.get('/bte/:btoId/pdf', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { btoId } = paramsSchema.parse(req.params)
     const { btoRow, owner } = await loadBtoContext(btoId)
-    assertDocumentAccess(btoRow, req.user)
+    await assertDocumentAccess(btoRow, req.user)
     const bteRow = await db.query.bte.findFirst({
       where: eq(bteTable.btoId, btoId),
       with: { bteRincian: true, bteBiayaLain: true },
