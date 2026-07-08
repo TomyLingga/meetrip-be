@@ -449,18 +449,44 @@ export async function listBtoService(filters: {
   page: number
   limit: number
 }) {
+  let approvedBtoIds: string[] = []
+  if (filters.employeeId) {
+    const btoApprovedLogs = await db.select({ btoId: btoApprovalLog.btoId })
+      .from(btoApprovalLog)
+      .where(
+        and(
+          eq(btoApprovalLog.actorId, filters.employeeId),
+          inArray(btoApprovalLog.aksi, ['approve', 'issued'])
+        )
+      )
+    
+    const spdkApprovedLogs = await db.select({ btoId: spdk.btoId })
+      .from(spdkApprovalLog)
+      .innerJoin(spdk, eq(spdkApprovalLog.spdkId, spdk.id))
+      .where(
+        and(
+          eq(spdkApprovalLog.actorId, filters.employeeId),
+          inArray(spdkApprovalLog.aksi, ['approve', 'issued'])
+        )
+      )
+
+    approvedBtoIds = Array.from(new Set([
+      ...btoApprovedLogs.map(l => l.btoId),
+      ...spdkApprovedLogs.map(l => l.btoId)
+    ]))
+  }
+
   const conditions = []
 
-  if (filters.isAdmin) {
-    if (filters.employeeId) {
-      conditions.push(eq(bto.employeeId, filters.employeeId))
-    }
-  } else if (filters.employeeId) {
+  if (filters.employeeId) {
     const userOrApproverConditions = [
       eq(bto.employeeId, filters.employeeId),
       eq(bto.pemberiTugasId, filters.employeeId)
     ]
-    if (filters.viewerRole?.split(',').includes('sdm')) {
+    if (approvedBtoIds.length > 0) {
+      userOrApproverConditions.push(inArray(bto.id, approvedBtoIds))
+    }
+    if (!filters.isAdmin && filters.viewerRole?.split(',').includes('sdm')) {
       userOrApproverConditions.push(eq(bto.status, 'SDM_REVIEW'))
     }
     conditions.push(or(...userOrApproverConditions))

@@ -25,21 +25,21 @@ export function spdkPrintTemplate(
         <title>Surat Perintah Perjalanan Dinas Karyawan (SPDK)</title>
         <style type="text/css">
                 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-                @page { size: portrait; margin: 15mm 15mm 30mm; }
+                @page { size: portrait; margin: 8mm 8mm 12mm; }
                 * { box-sizing: border-box; }
                 body {
                         font-family: Arial, Helvetica, sans-serif;
-                        font-size: 13px;
-                        line-height: 1.32;
+                        font-size: 11px;
+                        line-height: 1.25;
                         color: black;
                         margin: 0;
-                        padding-bottom: 95px;
+                        padding-bottom: 30px;
                 }
                 @media screen {
                         body {
                                 margin: 40px auto;
                                 max-width: 210mm;
-                                padding: 15mm 15mm 110px;
+                                padding: 8mm 8mm 40px;
                                 background: white;
                                 box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
                                 border: 1px solid #ddd;
@@ -55,8 +55,8 @@ export function spdkPrintTemplate(
                         .address-footer {
                                 position: absolute;
                                 bottom: 15px;
-                                left: 15mm;
-                                right: 15mm;
+                                left: 8mm;
+                                right: 8mm;
                         }
                 }
                 table { border-collapse: collapse; table-layout: fixed; }
@@ -140,10 +140,10 @@ export function spdkPrintTemplate(
                 }
                 .content-table {
                         width: 100%;
-                        margin-bottom: 24px;
+                        margin-bottom: 10px;
                 }
                 .content-table td {
-                        padding: 2px 0;
+                        padding: 1px 0;
                 }
                 .sizing-row td {
                         height: 0 !important;
@@ -160,95 +160,97 @@ export function spdkPrintTemplate(
                         width: 100%;
                 }
                 .bullet-table td {
-                        padding: 3px 0;
+                        padding: 2px 0;
                 }
                 .footer-table {
                         width: 100%;
-                        margin-top: 18px;
+                        margin-top: 8px;
                 }
                 .stempel-box {
                         width: 320px;
-                        height: 170px;
+                        height: 120px;
                         border: 1px solid #555;
                         display: flex;
                         flex-direction: column;
                         align-items: center;
                         justify-content: center;
-                        gap: 8px;
+                        gap: 6px;
                 }
                 .stempel-label {
                         text-align: center;
-                        font-size: 12px;
+                        font-size: 11px;
                         font-weight: 800;
                         font-style: italic;
                         text-decoration: underline;
                 }
                 .issued-table {
                         width: 100%;
-                        font-size: 13px;
+                        font-size: 11px;
                 }
                 .issued-table td {
                         padding: 2px 0;
                 }
                 .signature-area {
                         text-align: center;
-                        margin-top: 34px;
+                        margin-top: 12px;
                 }
                 .signature-box {
-                        height: 76px;
+                        height: 55px;
                         display: flex;
                         justify-content: center;
                         align-items: center;
                 }
                 .signature-qr {
-                        width: 72px;
-                        height: 72px;
+                        width: 50px;
+                        height: 50px;
                         object-fit: contain;
                 }
                 .signature-placeholder {
-                        width: 72px;
-                        height: 72px;
+                        width: 50px;
+                        height: 50px;
                         border: 1px dashed #666;
                         display: flex;
                         align-items: center;
                         justify-content: center;
                         color: #777;
-                        font-size: 11px;
+                        font-size: 9px;
                         line-height: 1;
                         font-weight: 800;
                 }
                 .destination-qr {
-                        width: 92px;
-                        height: 92px;
+                        width: 60px;
+                        height: 60px;
                         object-fit: contain;
                 }
                 .destination-placeholder {
-                        width: 92px;
-                        height: 92px;
+                        width: 60px;
+                        height: 60px;
                         border: 1px dashed #666;
                         display: flex;
                         align-items: center;
                         justify-content: center;
                         color: #777;
-                        font-size: 10px;
+                        font-size: 9px;
                         text-align: center;
-                        padding: 8px;
+                        padding: 4px;
                 }
                 .signature-name {
-                        font-size: 14px;
+                        font-size: 11px;
                         font-weight: 800;
                         text-decoration: underline;
                 }
                 .copy-row {
-                        margin-top: 42px;
-                        font-size: 13px;
+                        margin-top: 20px;
+                        font-size: 11px;
                 }
                 .address-footer {
-                        margin-top: 60px;
-                        padding-left: 14px;
-                        padding-right: 14px;
+                        position: fixed;
+                        left: 8mm;
+                        right: 8mm;
+                        bottom: 0;
+                        padding: 0 14px 2px;
                         font-family: "Times New Roman", Times, serif;
-                        font-size: 10px;
+                        font-size: 9.5px;
                         line-height: 1.15;
                         color: #555;
                 }

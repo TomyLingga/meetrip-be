@@ -41,18 +41,12 @@ export function btePrintTemplate(
     return item ? Number(item.nilaiTotal) || 0 : 0;
   };
 
-  const mealVal = findVal(['meal', 'makan']);
   const pocketVal = findVal(['pocket', 'saku']);
-  const transportVal = findVal(['transport', 'perjalanan'], ['local', 'lokal', 'airport', 'bandara']);
   const hotelVal = findVal(['hotel', 'penginapan']);
   const laundryVal = findVal(['laundry']);
-  const localTransVal = findVal(['local', 'lokal']);
-  const ticketVal = findVal(['ticket', 'tiket']);
-  const commsVal = findVal(['communication', 'komunikasi', 'pulsa', 'telepon']);
-  const airportVal = findVal(['airport', 'bandara']);
 
   const dpTotal = (dpRow?.dpRincian || []).reduce((acc: number, item: any) => acc + (Number(item.nilaiTotal) || 0), 0);
-  const bteRincianTotal = mealVal + pocketVal + transportVal + hotelVal + laundryVal + localTransVal + ticketVal + commsVal + airportVal;
+  const bteRincianTotal = pocketVal + hotelVal + laundryVal;
   const bteBiayaLainTotal = (bteRow?.bteBiayaLain || []).reduce((acc: number, item: any) => acc + (Number(item.nilai) || 0), 0);
   const bteTotal = bteRincianTotal + bteBiayaLainTotal;
   const finalTotal = bteTotal - dpTotal;
@@ -60,7 +54,7 @@ export function btePrintTemplate(
   const etcRows = (bteRow?.bteBiayaLain || []).map((item: any, idx: number) => `
                         <tr>
                                 <td></td>
-                                <td class="subno">X.3.${idx + 1}</td>
+                                <td class="subno">X.2.${idx + 1}</td>
                                 <td>${esc(item.keterangan)}</td>
                                 <td class="money-cell" colspan="2">${money(item.nilai, item.useDollar)}</td>
                         </tr>`).join('');
@@ -72,21 +66,21 @@ export function btePrintTemplate(
         <title>Detail of Business Trip Expenses (BTE)</title>
         <style type="text/css">
                 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-                @page { size: portrait; margin: 15mm 15mm 30mm; }
+                @page { size: portrait; margin: 8mm 8mm 12mm; }
                 * { box-sizing: border-box; }
                 body {
                         font-family: Arial, Helvetica, sans-serif;
-                        font-size: 10px;
+                        font-size: 9.5px;
                         line-height: 1.15;
                         color: #20242a;
                         margin: 0;
-                        padding-bottom: 98px;
+                        padding-bottom: 30px;
                 }
                 @media screen {
                         body {
                                 margin: 40px auto;
                                 max-width: 210mm;
-                                padding: 15mm 15mm 115px;
+                                padding: 8mm 8mm 40px;
                                 background: white;
                                 box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
                                 border: 1px solid #ddd;
@@ -193,12 +187,12 @@ export function btePrintTemplate(
                 .content-table {
                         width: 100%;
                         border: 1px solid #20242a;
-                        margin-top: 14px;
-                        font-size: 10px;
+                        margin-top: 6px;
+                        font-size: 9px;
                 }
                 .content-table td {
                         border: 1px solid #20242a;
-                        padding: 2px 4px;
+                        padding: 2px 3px;
                         vertical-align: middle;
                 }
                 .sizing-row td {
@@ -230,20 +224,20 @@ export function btePrintTemplate(
                 }
                 .sign-row {
                         text-align: right;
-                        margin-top: 8px;
+                        margin-top: 4px;
                         padding-right: 40px;
-                        font-size: 14px;
+                        font-size: 11px;
                 }
                 .personalia-qr-wrap {
                         display: flex;
                         justify-content: flex-end;
                         padding-right: 84px;
-                        margin-top: 24px;
+                        margin-top: 8px;
                 }
                 .personalia-qr,
                 .personalia-qr-placeholder {
-                        width: 62px;
-                        height: 62px;
+                        width: 50px;
+                        height: 50px;
                         object-fit: contain;
                 }
                 .personalia-qr-placeholder {
@@ -351,7 +345,7 @@ export function btePrintTemplate(
                         <tr>
                                 <td class="roman">III</td>
                                 <td class="label" colspan="2">POSITION</td>
-                                <td colspan="2">: &nbsp; ${esc((owner?.gradeKode || '').toUpperCase())}</td>
+                                <td colspan="2">: &nbsp; ${esc((owner?.jabatan || owner?.gradeKode || '').toUpperCase())}</td>
                         </tr>
                         <tr>
                                 <td class="roman">IV</td>
@@ -434,60 +428,24 @@ export function btePrintTemplate(
                         <tr>
                                 <td></td>
                                 <td class="subno">X.1.1</td>
-                                <td>MEAL ALLOWANCE</td>
-                                <td class="money-cell" colspan="2">${money(mealVal)}</td>
-                        </tr>
-                        <tr>
-                                <td></td>
-                                <td class="subno">X.1.2</td>
-                                <td>POCKET MONEY</td>
+                                <td>UANG SAKU HARIAN / POCKET MONEY</td>
                                 <td class="money-cell" colspan="2">${money(pocketVal)}</td>
                         </tr>
                         <tr>
                                 <td></td>
-                                <td class="subno">X.1.3</td>
-                                <td>TRANSPORTATION</td>
-                                <td class="money-cell" colspan="2">${money(transportVal)}</td>
-                        </tr>
-                        <tr>
-                                <td></td>
-                                <td class="subno">X.1.4</td>
+                                <td class="subno">X.1.2</td>
                                 <td>HOTEL</td>
                                 <td class="money-cell" colspan="2">${money(hotelVal)}</td>
                         </tr>
                         <tr>
                                 <td></td>
-                                <td class="subno">X.1.5</td>
+                                <td class="subno">X.1.3</td>
                                 <td>LAUNDRY</td>
                                 <td class="money-cell" colspan="2">${money(laundryVal)}</td>
                         </tr>
                         <tr>
                                 <td></td>
-                                <td class="subno">X.1.6</td>
-                                <td>LOCAL TRANSPORTATION</td>
-                                <td class="money-cell" colspan="2">${money(localTransVal)}</td>
-                        </tr>
-                        <tr>
-                                <td></td>
-                                <td class="subno">X.1.7</td>
-                                <td>TICKET</td>
-                                <td class="money-cell" colspan="2">${money(ticketVal)}</td>
-                        </tr>
-                        <tr>
-                                <td></td>
-                                <td class="subno">X.1.8</td>
-                                <td>COMMUNICATION</td>
-                                <td class="money-cell" colspan="2">${money(commsVal)}</td>
-                        </tr>
-                        <tr>
-                                <td></td>
                                 <td class="subno section-label">X.2</td>
-                                <td class="section-label">TO THE AIRPORT</td>
-                                <td class="money-cell" colspan="2">${money(airportVal)}</td>
-                        </tr>
-                        <tr>
-                                <td></td>
-                                <td class="subno section-label">X.3</td>
                                 <td class="section-label" colspan="3">ETC</td>
                         </tr>
                         ${etcRows}

@@ -126,7 +126,7 @@ async function fetchPortalEmployee(employeeId?: string | null) {
   if (!employeeId) return null
   try {
     const res = await fetch(`${config.portal.apiUrl}/api/sso/employees?id=${employeeId}`, {
-      headers: { 'x-internal-token': config.portal.internalToken },
+      headers: { 'x-internal': config.portal.internalToken },
     })
     if (!res.ok) return null
     const body: any = await res.json()
@@ -309,6 +309,7 @@ async function renderBto(btoRow: BtoRow, owner: any, logs: BtoLog[]) {
         jabatan: ptEmployee.jabatan ?? null,
         gradeKode: ptEmployee.gradeKode ?? ptEmployee.grade?.kode ?? ptRow?.gradeKode,
         unitNama: ptEmployee.unitNama ?? ptEmployee.organisasi?.nama ?? ptRow?.unitNama,
+        unitTipe: ptEmployee.unitTipe ?? ptEmployee.organisasi?.tipe ?? (ptRow as any)?.unitTipe ?? null,
       }
     }
   }
@@ -495,6 +496,7 @@ async function loadBtoContext(btoId: string) {
       gradeKode: portalEmployee.gradeKode ?? portalEmployee.grade?.kode ?? owner?.gradeKode,
       gradeLevel: portalEmployee.gradeLevel ?? portalEmployee.grade?.level ?? owner?.gradeLevel,
       unitNama: portalEmployee.unitNama ?? portalEmployee.organisasi?.nama ?? owner?.unitNama,
+      unitTipe: portalEmployee.unitTipe ?? portalEmployee.organisasi?.tipe ?? (owner as any)?.unitTipe ?? null,
     } : owner,
   }
 }
@@ -502,8 +504,25 @@ async function loadBtoContext(btoId: string) {
 async function assertDocumentAccess(btoRow: BtoRow, user: any, passedSpdkRow?: typeof spdkTable.$inferSelect | null) {
   const roles = (user.role ?? '').split(',')
   if (roles.some((r: string) => ['super_admin', 'admin', 'sdm'].includes(r))) return
-  const userIds = [user.sub, user.employeeId].filter(Boolean)
-  if (userIds.includes(btoRow.employeeId) || userIds.includes(btoRow.pemberiTugasId ?? '')) return
+  const userIds = new Set<string>()
+  for (const id of [user.sub, user.employeeId]) {
+    if (id) userIds.add(String(id))
+  }
+
+  const cacheRows = await Promise.all([
+    user.sub ? db.query.localUserCache.findFirst({ where: eq(localUserCache.portalUserId, user.sub) }) : Promise.resolve(null),
+    user.sub ? db.query.localUserCache.findFirst({ where: eq(localUserCache.employeeId, user.sub) }) : Promise.resolve(null),
+    user.employeeId ? db.query.localUserCache.findFirst({ where: eq(localUserCache.portalUserId, user.employeeId) }) : Promise.resolve(null),
+    user.employeeId ? db.query.localUserCache.findFirst({ where: eq(localUserCache.employeeId, user.employeeId) }) : Promise.resolve(null),
+  ])
+  for (const cache of cacheRows) {
+    if (!cache) continue
+    userIds.add(cache.id)
+    userIds.add(cache.portalUserId)
+    if (cache.employeeId) userIds.add(cache.employeeId)
+  }
+
+  if (userIds.has(btoRow.employeeId) || userIds.has(btoRow.pemberiTugasId ?? '')) return
   
   let spdkRow = passedSpdkRow;
   if (spdkRow === undefined) {
@@ -511,7 +530,7 @@ async function assertDocumentAccess(btoRow: BtoRow, user: any, passedSpdkRow?: t
     spdkRow = row
   }
   
-  if (spdkRow && userIds.includes(spdkRow.approverKabagId ?? '')) return
+  if (spdkRow && userIds.has(spdkRow.approverKabagId ?? '')) return
   throw new AppError('Tidak diizinkan membuka dokumen ini', 403)
 }
 

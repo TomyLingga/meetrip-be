@@ -17,19 +17,26 @@ export function panjarLuarNegeriPrintTemplate(data: any) {
     }
   };
 
+  let romanIndex = 0;
+  const ROMANS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+  let currentRoman = '';
+  const nextRoman = () => {
+    currentRoman = ROMANS[romanIndex++] || '';
+    return currentRoman;
+  };
+
   return `
 <!DOCTYPE html>
 <html>
 <head>
         <title>Detail of Down Payment (DP) Abroad</title>
         <style type="text/css">
-                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-                @page { size: portrait; margin: 15mm; }
+                @page { size: portrait; margin: 8mm 8mm 12mm; }
                 * { box-sizing: border-box; }
                 body {
                         font-family: Arial, Helvetica, sans-serif;
-                        font-size: 10px;
-                        line-height: 1.3;
+                        font-size: 9.5px;
+                        line-height: 1.25;
                         color: black;
                         margin: 0;
                 }
@@ -37,7 +44,7 @@ export function panjarLuarNegeriPrintTemplate(data: any) {
                         body {
                                 margin: 40px auto;
                                 max-width: 210mm;
-                                padding: 15mm;
+                                padding: 8mm 8mm 30px;
                                 background: white;
                                 box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
                                 border: 1px solid #ddd;
@@ -50,29 +57,26 @@ export function panjarLuarNegeriPrintTemplate(data: any) {
                                 margin: 0 auto 10px;
                         }
                 }
-                .under {
-                        text-decoration: underline;
-                }
-                .bold {
-                        font-weight: bold;
-                }
+                table { border-collapse: collapse; table-layout: fixed; }
+                td { overflow-wrap: anywhere; word-break: normal; }
+                .bold { font-weight: bold; }
                 /* Document Header Table */
                 .header-table {
                         width: 100%;
                         border-collapse: collapse;
                         font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                        margin-bottom: 12px;
+                        margin-bottom: 6px;
                 }
                 .header-table td, .header-table th {
                         border: 1px solid #000;
-                        padding: 8px;
+                        padding: 4px 6px;
                         vertical-align: middle;
                         box-sizing: border-box;
                 }
                 .logo-cell {
                         width: 15%;
                         text-align: center;
-                        padding: 5px !important;
+                        padding: 3px !important;
                 }
                 .logo-img {
                         display: block;
@@ -86,43 +90,43 @@ export function panjarLuarNegeriPrintTemplate(data: any) {
                         text-align: center;
                 }
                 .company-title {
-                        font-size: 14px;
+                        font-size: 12px;
                         font-weight: 800;
                         color: #000;
                         letter-spacing: 0.5px;
                         text-transform: uppercase;
                 }
                 .company-subtitle {
-                        font-size: 10px;
+                        font-size: 9px;
                         color: #000;
                         font-weight: 700;
-                        margin-top: 2px;
+                        margin-top: 1px;
                         text-transform: uppercase;
                 }
                 .company-address {
                         font-size: 8px;
                         color: #000;
-                        margin-top: 4px;
-                        line-height: 1.3;
+                        margin-top: 2px;
+                        line-height: 1.2;
                         font-weight: 500;
                 }
                 .meta-title-cell {
                         width: 17.5%;
                         font-weight: 700;
-                        font-size: 9.5px;
+                        font-size: 9px;
                         text-transform: uppercase;
                         color: #000;
                         text-align: center;
                 }
                 .meta-value-cell {
                         width: 17.5%;
-                        font-size: 10px;
+                        font-size: 9px;
                         text-align: center;
                         font-weight: 600;
                         color: #000;
                 }
                 .doc-title-cell {
-                        font-size: 11px;
+                        font-size: 10px;
                         font-weight: 800;
                         color: #000;
                         text-align: center;
@@ -134,41 +138,71 @@ export function panjarLuarNegeriPrintTemplate(data: any) {
                 }
                 .content-table {
                         width: 100%;
-                        border-collapse: collapse;
-                        margin-top: 10px;
+                        border: 1px solid black;
+                        margin-top: 8px;
                 }
                 .content-table td {
                         border: 1px solid black;
-                        padding: 4px 6px;
-                        vertical-align: top;
+                        padding: 4px 5px;
+                        vertical-align: middle;
                 }
-                .no-border-left-right {
-                        border-left: 0 !important;
-                        border-right: 0 !important;
+                .biaya-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin-top: 8px;
+                }
+                .biaya-table th, .biaya-table td {
+                        border: 1px solid black;
+                        padding: 4px 5px;
+                }
+                .biaya-table th {
+                        background-color: #f1f5f9;
+                        font-weight: bold;
+                        text-align: center;
                 }
                 .footer-table {
                         width: 100%;
-                        margin-top: 15px;
+                        margin-top: 12px;
+                        page-break-inside: avoid;
                 }
-                .address-footer {
-                        width: 100%;
-                        margin-top: 20px;
-                        font-size: 8px;
-                        color: #555;
-                        line-height: 1.3;
-                        border-top: 1px solid #ddd;
-                        padding: 8px 12px 0;
+                .footer-table td {
                         text-align: center;
+                        vertical-align: top;
+                        width: 33.33%;
+                }
+                .personalia-qr-box {
+                        height: 55px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        margin: 2px 0;
+                }
+                .personalia-qr {
+                        width: 50px;
+                        height: 50px;
+                        object-fit: contain;
+                }
+                .personalia-qr-placeholder {
+                        font-family: Arial, Helvetica, sans-serif;
+                        width: 50px;
+                        height: 50px;
+                        border: 1px dashed #666;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: #777;
+                        font-size: 9px;
+                        line-height: 1;
+                        font-weight: 800;
+                }
+                .underline {
+                        text-decoration: underline;
                 }
                 .no-print { margin: 0 auto 10px; text-align: right; }
                 .no-print button { padding: 6px 10px; border: 1px solid #0f766e; border-radius: 4px; background: #0f766e; color: white; font-weight: 700; cursor: pointer; }
                 @media print {
                         .no-print {
                                 display: none;
-                        }
-                        body {
-                                padding-left: 8mm;
-                                padding-right: 8mm;
                         }
                 }
         </style>
@@ -212,76 +246,76 @@ export function panjarLuarNegeriPrintTemplate(data: any) {
         <!-- Content Table -->
         <table class="content-table">
                 <tr>
-                        <td width="5%" align="center">I</td>
+                        <td width="5%" align="center">${nextRoman()}</td>
                         <td width="30%" class="bold" style="font-style: italic;">SPJ/BTO NUMBER</td>
                         <td>: &nbsp; ${esc(btoRow.nomorBto || 'SURAT BELUM DITERBITKAN')}</td>
                 </tr>
                 <tr>
-                        <td align="center">II</td>
+                        <td align="center">${nextRoman()}</td>
                         <td class="bold" style="font-style: italic;">NAME</td>
                         <td>: &nbsp; ${esc((btoRow.employeeNama || owner?.nama || '').toUpperCase())}</td>
                 </tr>
                 <tr>
-                        <td align="center">III</td>
+                        <td align="center">${nextRoman()}</td>
                         <td class="bold" style="font-style: italic;">POSITION</td>
-                        <td>: &nbsp; ${esc((owner?.gradeKode || '').toUpperCase())}</td>
+                        <td>: &nbsp; ${esc((owner?.jabatan || '').toUpperCase())}</td>
                 </tr>
                 <tr>
-                        <td align="center">IV</td>
+                        <td align="center">${nextRoman()}</td>
                         <td class="bold" style="font-style: italic;">JOB LEVEL</td>
                         <td>: &nbsp; ${jobLevelName(owner?.gradeLevel)}</td>
                 </tr>
                 <tr>
-                        <td align="center">V</td>
+                        <td align="center">${nextRoman()}</td>
                         <td class="bold" style="font-style: italic;">DESTINATION</td>
                         <td>: &nbsp; ${esc(btoRow.tujuanNama).toUpperCase()}</td>
                 </tr>
                 <tr>
-                        <td align="center">VI</td>
+                        <td align="center">${nextRoman()}</td>
                         <td class="bold" style="font-style: italic;">NECESSARY</td>
                         <td>: &nbsp; ${esc(btoRow.kepentingan).toUpperCase()}</td>
                 </tr>
                 <tr>
-                        <td align="center">VII</td>
+                        <td align="center">${nextRoman()}</td>
                         <td class="bold" style="font-style: italic;">TOTAL DAYS</td>
                         <td>: &nbsp; ${durationDays(btoRow.estBerangkat, btoRow.estKembali)} HARI</td>
                 </tr>
                 <tr>
-                        <td align="center">VIII</td>
+                        <td align="center">${nextRoman()}</td>
                         <td class="bold" style="font-style: italic;" colspan="2">PERIODE</td>
                 </tr>
                 <tr>
                         <td></td>
-                        <td style="font-style: italic; padding-left: 20px;">VIII.1 START</td>
+                        <td style="font-style: italic; padding-left: 20px;">${currentRoman}.1 START</td>
                         <td>: &nbsp; ${dateText(btoRow.estBerangkat).toUpperCase()}</td>
                 </tr>
                 <tr>
                         <td></td>
-                        <td style="font-style: italic; padding-left: 20px;">VIII.2 END</td>
+                        <td style="font-style: italic; padding-left: 20px;">${currentRoman}.2 END</td>
                         <td>: &nbsp; ${dateText(btoRow.estKembali).toUpperCase()}</td>
                 </tr>
                 <tr>
-                        <td align="center">IX</td>
+                        <td align="center">${nextRoman()}</td>
                         <td class="bold" style="font-style: italic;" colspan="2">DESCRIPTION OF SCHEDULE</td>
                 </tr>
                 <tr>
                         <td></td>
-                        <td style="font-style: italic; padding-left: 20px;">IX.1 DEPARTURE DATE</td>
+                        <td style="font-style: italic; padding-left: 20px;">${currentRoman}.1 DEPARTURE DATE</td>
                         <td>: &nbsp; ${dateText(btoRow.estBerangkat).toUpperCase()}</td>
                 </tr>
                 <tr>
                         <td></td>
-                        <td style="font-style: italic; padding-left: 20px;">IX.2 DEPARTURE TIME</td>
+                        <td style="font-style: italic; padding-left: 20px;">${currentRoman}.2 DEPARTURE TIME</td>
                         <td>: &nbsp; ${departureTime}</td>
                 </tr>
                 <tr>
                         <td></td>
-                        <td style="font-style: italic; padding-left: 20px;">IX.3 ARRIVAL DATE</td>
+                        <td style="font-style: italic; padding-left: 20px;">${currentRoman}.3 ARRIVAL DATE</td>
                         <td>: &nbsp; ${dateText(btoRow.estKembali).toUpperCase()}</td>
                 </tr>
                 <tr>
                         <td></td>
-                        <td style="font-style: italic; padding-left: 20px;">IX.4 ARRIVAL TIME</td>
+                        <td style="font-style: italic; padding-left: 20px;">${currentRoman}.4 ARRIVAL TIME</td>
                         <td>: &nbsp; ${arrivalTime}</td>
                 </tr>
         </table>

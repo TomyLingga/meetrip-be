@@ -110,8 +110,8 @@ export async function kalkulasiPaguBto(params: {
       results.push({
         rincianId:    rincian.id,
         rincianLabel: rincian.label,
-        isUnlimited:  false,
-        hasPagu:      true,
+        isUnlimited:  true,
+        hasPagu:      false,
         perMalam:     rincian.perMalam,
         useDollar:    rincian.useDollarOverride,
         nilaiPerHari: 0,

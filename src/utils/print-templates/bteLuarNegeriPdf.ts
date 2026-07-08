@@ -28,20 +28,14 @@ export function bteLuarNegeriPrintTemplate(data: any) {
                 return item ? Number(item.nilaiTotal) || 0 : 0;
         };
 
-        const mealVal = findVal(['meal', 'makan']);
         const pocketVal = findVal(['pocket', 'saku']);
-        const transportVal = findVal(['transport', 'perjalanan'], ['local', 'lokal', 'airport', 'bandara']);
         const hotelVal = findVal(['hotel', 'penginapan']);
         const laundryVal = findVal(['laundry']);
-        const localTransVal = findVal(['local', 'lokal']);
-        const ticketVal = findVal(['ticket', 'tiket']);
-        const commsVal = findVal(['communication', 'komunikasi', 'pulsa', 'telepon']);
-        const airportVal = findVal(['airport', 'bandara']);
 
         // Calculate totals (with dollar formatting flag if applicable)
         const isBteDollar = (bteRow?.bteRincian || []).some((r: any) => r.useDollar);
         const dpTotal = (dpRow?.dpRincian || []).reduce((acc: number, item: any) => acc + (Number(item.nilaiTotal) || 0), 0);
-        const bteRincianTotal = mealVal + pocketVal + transportVal + hotelVal + laundryVal + localTransVal + ticketVal + commsVal + airportVal;
+        const bteRincianTotal = pocketVal + hotelVal + laundryVal;
         const bteBiayaLainTotal = (bteRow?.bteBiayaLain || []).reduce((acc: number, item: any) => acc + (Number(item.nilai) || 0), 0);
         const bteTotal = bteRincianTotal + bteBiayaLainTotal;
         const finalTotal = bteTotal - dpTotal;
@@ -51,7 +45,7 @@ export function bteLuarNegeriPrintTemplate(data: any) {
                 return `
       <tr style="font-size:10px;">
         <td class="border border-dark text-center"></td>
-        <td class="border border-dark text-center">X.3.${idx + 1}</td>
+        <td class="border border-dark text-center">X.2.${idx + 1}</td>
         <td class="border border-dark" colspan="3" style="padding-left:3%; text-transform: uppercase;">${esc(item.keterangan)}</td>
         <td class="border border-dark text-right" style="padding-right:3%;" colspan="2">${money(item.nilai, item.useDollar || isBteDollar)}</td>
       </tr>`;
@@ -64,12 +58,12 @@ export function bteLuarNegeriPrintTemplate(data: any) {
         <title>Detail of Business Trip Expenses (BTE) Abroad</title>
         <style type="text/css">
                 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-                @page { size: portrait; margin: 15mm; }
+                @page { size: portrait; margin: 8mm 8mm 12mm; }
                 * { box-sizing: border-box; }
                 body {
                         font-family: Arial, Helvetica, sans-serif;
-                        font-size: 10px;
-                        line-height: 1.3;
+                        font-size: 9.5px;
+                        line-height: 1.25;
                         color: black;
                         margin: 0;
                 }
@@ -77,7 +71,7 @@ export function bteLuarNegeriPrintTemplate(data: any) {
                         body {
                                 margin: 40px auto;
                                 max-width: 210mm;
-                                padding: 15mm;
+                                padding: 8mm 8mm 30px;
                                 background: white;
                                 box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
                                 border: 1px solid #ddd;
@@ -101,18 +95,18 @@ export function bteLuarNegeriPrintTemplate(data: any) {
                         width: 100%;
                         border-collapse: collapse;
                         font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                        margin-bottom: 12px;
+                        margin-bottom: 6px;
                 }
                 .header-table td, .header-table th {
                         border: 1px solid #000;
-                        padding: 8px;
+                        padding: 4px 6px;
                         vertical-align: middle;
                         box-sizing: border-box;
                 }
                 .logo-cell {
                         width: 15%;
                         text-align: center;
-                        padding: 5px !important;
+                        padding: 3px !important;
                 }
                 .logo-img {
                         display: block;
@@ -126,43 +120,43 @@ export function bteLuarNegeriPrintTemplate(data: any) {
                         text-align: center;
                 }
                 .company-title {
-                        font-size: 14px;
+                        font-size: 12px;
                         font-weight: 800;
                         color: #000;
                         letter-spacing: 0.5px;
                         text-transform: uppercase;
                 }
                 .company-subtitle {
-                        font-size: 10px;
+                        font-size: 9px;
                         color: #000;
                         font-weight: 700;
-                        margin-top: 2px;
+                        margin-top: 1px;
                         text-transform: uppercase;
                 }
                 .company-address {
                         font-size: 8px;
                         color: #000;
-                        margin-top: 4px;
-                        line-height: 1.3;
+                        margin-top: 2px;
+                        line-height: 1.2;
                         font-weight: 500;
                 }
                 .meta-title-cell {
                         width: 17.5%;
                         font-weight: 700;
-                        font-size: 9.5px;
+                        font-size: 9px;
                         text-transform: uppercase;
                         color: #000;
                         text-align: center;
                 }
                 .meta-value-cell {
                         width: 17.5%;
-                        font-size: 10px;
+                        font-size: 9px;
                         text-align: center;
                         font-weight: 600;
                         color: #000;
                 }
                 .doc-title-cell {
-                        font-size: 11px;
+                        font-size: 10px;
                         font-weight: 800;
                         color: #000;
                         text-align: center;
@@ -175,11 +169,11 @@ export function bteLuarNegeriPrintTemplate(data: any) {
                 .content-table {
                         width: 100%;
                         border-collapse: collapse;
-                        margin-top: 10px;
+                        margin-top: 8px;
                 }
                 .content-table td {
                         border: 1px solid black;
-                        padding: 4px 6px;
+                        padding: 3px 4px;
                         vertical-align: top;
                 }
                 .text-right {
@@ -190,16 +184,16 @@ export function bteLuarNegeriPrintTemplate(data: any) {
                 }
                 .footer-table {
                         width: 100%;
-                        margin-top: 15px;
+                        margin-top: 12px;
                 }
                 .address-footer {
                         width: 100%;
-                        margin-top: 20px;
+                        margin-top: 10px;
                         font-size: 8px;
                         color: #555;
-                        line-height: 1.3;
+                        line-height: 1.25;
                         border-top: 1px solid #ddd;
-                        padding: 8px 12px 0;
+                        padding: 6px 12px 0;
                         text-align: center;
                 }
                 .no-print { margin: 0 auto 10px; text-align: right; }
@@ -209,8 +203,8 @@ export function bteLuarNegeriPrintTemplate(data: any) {
                                 display: none;
                         }
                         body {
-                                padding-left: 8mm;
-                                padding-right: 8mm;
+                                padding-left: 6mm;
+                                padding-right: 6mm;
                         }
                 }
         </style>
@@ -266,7 +260,7 @@ export function bteLuarNegeriPrintTemplate(data: any) {
                 <tr>
                         <td align="center">III</td>
                         <td class="bold" style="font-style: italic;">POSITION</td>
-                        <td colspan="5">: &nbsp; ${esc((owner?.gradeKode || '').toUpperCase())}</td>
+                        <td colspan="5">: &nbsp; ${esc((owner?.jabatan || owner?.gradeKode || '').toUpperCase())}</td>
                 </tr>
                 <tr>
                         <td align="center">IV</td>
@@ -342,59 +336,24 @@ export function bteLuarNegeriPrintTemplate(data: any) {
                 <tr style="font-size: 10px;">
                         <td></td>
                         <td style="padding-left: 20px;" width="5%">X.1.1</td>
-                        <td colspan="3">MEAL ALLOWANCE</td>
-                        <td class="text-right" colspan="2">${money(mealVal, isBteDollar)}</td>
-                </tr>
-                <tr style="font-size: 10px;">
-                        <td></td>
-                        <td style="padding-left: 20px;">X.1.2</td>
-                        <td colspan="3">POCKET MONEY</td>
+                        <td colspan="3">UANG SAKU HARIAN / POCKET MONEY</td>
                         <td class="text-right" colspan="2">${money(pocketVal, isBteDollar)}</td>
                 </tr>
                 <tr style="font-size: 10px;">
                         <td></td>
-                        <td style="padding-left: 20px;">X.1.3</td>
-                        <td colspan="3">TRANSPORTATION</td>
-                        <td class="text-right" colspan="2">${money(transportVal, isBteDollar)}</td>
-                </tr>
-                <tr style="font-size: 10px;">
-                        <td></td>
-                        <td style="padding-left: 20px;">X.1.4</td>
+                        <td style="padding-left: 20px;">X.1.2</td>
                         <td colspan="3">HOTEL</td>
                         <td class="text-right" colspan="2">${money(hotelVal, isBteDollar)}</td>
                 </tr>
                 <tr style="font-size: 10px;">
                         <td></td>
-                        <td style="padding-left: 20px;">X.1.5</td>
+                        <td style="padding-left: 20px;">X.1.3</td>
                         <td colspan="3">LAUNDRY</td>
                         <td class="text-right" colspan="2">${money(laundryVal, isBteDollar)}</td>
                 </tr>
-                <tr style="font-size: 10px;">
-                        <td></td>
-                        <td style="padding-left: 20px;">X.1.6</td>
-                        <td colspan="3">LOCAL TRANSPORTATION</td>
-                        <td class="text-right" colspan="2">${money(localTransVal, isBteDollar)}</td>
-                </tr>
-                <tr style="font-size: 10px;">
-                        <td></td>
-                        <td style="padding-left: 20px;">X.1.7</td>
-                        <td colspan="3">TICKET</td>
-                        <td class="text-right" colspan="2">${money(ticketVal, isBteDollar)}</td>
-                </tr>
-                <tr style="font-size: 10px;">
-                        <td></td>
-                        <td style="padding-left: 20px;">X.1.8</td>
-                        <td colspan="3">COMMUNICATION</td>
-                        <td class="text-right" colspan="2">${money(commsVal, isBteDollar)}</td>
-                </tr>
                 <tr class="bold" style="font-size: 10px;">
                         <td></td>
-                        <td style="font-style: italic;" colspan="4">X.2 TO THE AIRPORT</td>
-                        <td class="text-right" colspan="2">${money(airportVal, isBteDollar)}</td>
-                </tr>
-                <tr class="bold" style="font-size: 10px;">
-                        <td></td>
-                        <td style="font-style: italic;" colspan="6">X.3 ETC</td>
+                        <td style="font-style: italic;" colspan="6">X.2 ETC</td>
                 </tr>
                 ${etcRows}
                 <tr class="bold" style="font-size: 11px;">
