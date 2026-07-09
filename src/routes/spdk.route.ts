@@ -94,7 +94,7 @@ export default async function spdkRoutes(fastify: FastifyInstance) {
       catatanAdmin: z.string().optional(),
     }).parse(req.body);
     
-    const isAdmin = ['super_admin', 'admin'].includes(req.user.role || '');
+    const isAdmin = (req.user.role || '').split(',').some(r => ['super_admin', 'admin'].includes(r));
     const result = await updateSpdkService(id, isAdmin, { nomorSpdk, catatanAdmin });
     return reply.send(ok(result));
   });
@@ -108,7 +108,7 @@ export default async function spdkRoutes(fastify: FastifyInstance) {
     }).parse(req.body);
     
     const actor = { id: req.user.sub, employeeId: req.user.employeeId, gradeLevel: req.user.gradeLevel, nama: req.user.nama || '' };
-    const isAdmin = ['super_admin', 'admin'].includes(req.user.role || '');
+    const isAdmin = (req.user.role || '').split(',').some(r => ['super_admin', 'admin'].includes(r));
     const result = await kabagApproveSpdkService(id, aksi, actor, isAdmin, catatan);
     return reply.send(ok(result));
   });
@@ -118,13 +118,13 @@ export default async function spdkRoutes(fastify: FastifyInstance) {
     const { btoId } = req.params as { btoId: string };
     const { latitude, longitude, isAdminOverride } = attendSchema.parse(req.body);
     const userRole = req.user.role || '';
+    const isAdmin = userRole.split(',').some(r => ['super_admin', 'admin'].includes(r));
     
-    if (isAdminOverride && !['super_admin', 'admin'].includes(userRole)) {
+    if (isAdminOverride && !isAdmin) {
       throw new AppError('Hanya admin yang bisa melakukan override stamp', 403);
     }
 
     const actor = { id: req.user.sub, nama: req.user.nama || '' };
-    const isAdmin = ['super_admin', 'admin'].includes(userRole);
     const result = await attendStampService(btoId, actor, latitude, longitude, isAdminOverride, isAdmin);
     return reply.send(ok(result));
   });

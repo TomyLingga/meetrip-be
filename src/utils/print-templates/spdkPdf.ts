@@ -454,7 +454,7 @@ export function spdkPrintTemplate(
                                 <div class="signature-area">
                                         <div class="signature-box">${signatureMark}</div>
                                         <div class="signature-name">${esc(spdkRow.approverKabagNama || 'Ferdiansyah')}</div>
-                                        <div>Kabag SDM &amp; Sistem</div>
+                                        <div>${esc(spdkRow.approverKabagPosition || 'Kabag SDM & Sistem')}</div>
                                 </div>
                         </td>
                 </tr>

@@ -45,10 +45,8 @@ export function btePrintTemplate(
   const hotelVal = findVal(['hotel', 'penginapan']);
   const laundryVal = findVal(['laundry']);
 
-  const dpTotal = (dpRow?.dpRincian || []).reduce((acc: number, item: any) => acc + (Number(item.nilaiTotal) || 0), 0);
-  const bteRincianTotal = pocketVal + hotelVal + laundryVal;
-  const bteBiayaLainTotal = (bteRow?.bteBiayaLain || []).reduce((acc: number, item: any) => acc + (Number(item.nilai) || 0), 0);
-  const bteTotal = bteRincianTotal + bteBiayaLainTotal;
+  const dpTotal = dpRow ? Number(dpRow.totalIdr || 0) : 0;
+  const bteTotal = Number(bteRow?.totalIdr || 0);
   const finalTotal = bteTotal - dpTotal;
 
   const etcRows = (bteRow?.bteBiayaLain || []).map((item: any, idx: number) => `
@@ -449,13 +447,17 @@ export function btePrintTemplate(
                                 <td class="section-label" colspan="3">ETC</td>
                         </tr>
                         ${etcRows}
+                        <tr class="bold">
+                                <td class="total-label" colspan="3">TOTAL EXPENSES</td>
+                                <td class="money-cell" colspan="2">${money(bteTotal)}</td>
+                        </tr>
                         <tr>
                                 <td class="total-label" colspan="3">DOWN PAYMENT</td>
                                 <td class="money-cell" colspan="2">${money(dpTotal)}</td>
                         </tr>
-                        <tr>
-                                <td class="total-label" colspan="3">FINAL</td>
-                                <td class="money-cell bold" colspan="2">${money(finalTotal)}</td>
+                        <tr class="bold">
+                                <td class="total-label" colspan="3">${finalTotal < 0 ? 'FINAL (OVERPAID / REFUND TO COMPANY)' : finalTotal > 0 ? 'FINAL (UNDERPAID / REIMBURSE TO EMPLOYEE)' : 'FINAL'}</td>
+                                <td class="money-cell bold" colspan="2">${money(finalTotal < 0 ? Math.abs(finalTotal) : finalTotal)}</td>
                         </tr>
                 </table>
 

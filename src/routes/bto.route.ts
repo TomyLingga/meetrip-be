@@ -105,6 +105,8 @@ async function buildBtoApprovalTimeline(id: string) {
           ? 'Absensi dinas dioverride oleh admin.'
           : `Absen diterima. Jarak dari tujuan: ${Number(stamp.jarakDariTujuanM || 0).toFixed(0)} meter.`,
         createdAt: stamp.stamped_at,
+        stampLat: stamp.stampLat,
+        stampLng: stamp.stampLng,
       })),
     ]
   }

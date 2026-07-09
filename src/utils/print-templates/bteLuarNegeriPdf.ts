@@ -18,6 +18,8 @@ export function bteLuarNegeriPrintTemplate(data: any) {
         };
 
         // Helper to match database rincian items to their corresponding layout category
+        const isBteDollar = (bteRow?.bteRincian || []).some((r: any) => r.useDollar);
+
         const findVal = (keywords: string[], excludeKeywords: string[] = []) => {
                 const item = (bteRow?.bteRincian || []).find((r: any) => {
                         const lbl = (r.rincianLabel || '').toLowerCase();
@@ -25,7 +27,8 @@ export function bteLuarNegeriPrintTemplate(data: any) {
                         const excluded = excludeKeywords.some(k => lbl.includes(k));
                         return matches && !excluded;
                 });
-                return item ? Number(item.nilaiTotal) || 0 : 0;
+                if (!item) return 0;
+                return isBteDollar && item.useDollar ? Number(item.nilaiUsd) || 0 : Number(item.nilaiTotal) || 0;
         };
 
         const pocketVal = findVal(['pocket', 'saku']);
@@ -33,11 +36,8 @@ export function bteLuarNegeriPrintTemplate(data: any) {
         const laundryVal = findVal(['laundry']);
 
         // Calculate totals (with dollar formatting flag if applicable)
-        const isBteDollar = (bteRow?.bteRincian || []).some((r: any) => r.useDollar);
-        const dpTotal = (dpRow?.dpRincian || []).reduce((acc: number, item: any) => acc + (Number(item.nilaiTotal) || 0), 0);
-        const bteRincianTotal = pocketVal + hotelVal + laundryVal;
-        const bteBiayaLainTotal = (bteRow?.bteBiayaLain || []).reduce((acc: number, item: any) => acc + (Number(item.nilai) || 0), 0);
-        const bteTotal = bteRincianTotal + bteBiayaLainTotal;
+        const dpTotal = dpRow ? Number(isBteDollar ? (dpRow.totalUsd || 0) : (dpRow.totalIdr || 0)) : 0;
+        const bteTotal = Number(isBteDollar ? (bteRow?.totalUsd || 0) : (bteRow?.totalIdr || 0));
         const finalTotal = bteTotal - dpTotal;
 
         // Render Custom Cost Items
@@ -357,12 +357,18 @@ export function bteLuarNegeriPrintTemplate(data: any) {
                 </tr>
                 ${etcRows}
                 <tr class="bold" style="font-size: 11px;">
+                        <td colspan="5" align="right" style="padding-right: 15px; font-style: italic;">TOTAL EXPENSES</td>
+                        <td class="text-right" colspan="2">${money(bteTotal, isBteDollar)}</td>
+                </tr>
+                <tr class="bold" style="font-size: 11px;">
                         <td colspan="5" align="right" style="padding-right: 15px; font-style: italic;">DOWN PAYMENT</td>
                         <td class="text-right" colspan="2">${money(dpTotal, isBteDollar)}</td>
                 </tr>
                 <tr class="bold" style="font-size: 11px;">
-                        <td colspan="5" align="right" style="padding-right: 15px; font-style: italic;">FINAL</td>
-                        <td class="text-right" colspan="2">${money(finalTotal, isBteDollar)}</td>
+                        <td colspan="5" align="right" style="padding-right: 15px; font-style: italic;">
+                                ${finalTotal < 0 ? 'FINAL (OVERPAID / REFUND TO COMPANY)' : finalTotal > 0 ? 'FINAL (UNDERPAID / REIMBURSE TO EMPLOYEE)' : 'FINAL'}
+                        </td>
+                        <td class="text-right" colspan="2">${money(finalTotal < 0 ? Math.abs(finalTotal) : finalTotal, isBteDollar)}</td>
                 </tr>
         </table>
 

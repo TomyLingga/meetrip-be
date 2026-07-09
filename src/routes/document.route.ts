@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, or } from 'drizzle-orm'
 import QRCode from 'qrcode'
 import fs from 'fs'
 import path from 'path'
@@ -26,6 +26,8 @@ import { panjarPrintTemplate } from '../utils/print-templates/panjarPdf'
 import { panjarLuarNegeriPrintTemplate } from '../utils/print-templates/panjarLuarNegeriPdf'
 import { btePrintTemplate } from '../utils/print-templates/btePdf'
 import { bteLuarNegeriPrintTemplate } from '../utils/print-templates/bteLuarNegeriPdf'
+import { ensureApproverSpdkConfig, resolveSpdkApproverKabag } from '../services/spdk.service'
+import { listBtoApprovalsService, listBtoApprovalsHistoryService } from '../services/bto.service'
 
 const paramsSchema = z.object({
   btoId: z.string().uuid(),
@@ -294,7 +296,9 @@ function tripSection(btoRow: BtoRow) {
 }
 
 async function renderBto(btoRow: BtoRow, owner: any, logs: BtoLog[]) {
-  const sdmLog = pickLog(logs, (log) => ['sdm', 'admin_dp'].includes(log.tahap) && log.aksi === 'approve')
+  const sdmLog = ['SPDK_DRAFT', 'KABAG_REVIEW', 'ACTIVE', 'ATTENDED', 'REPORT_UPLOADED', 'ADMIN_BTE_REVIEW', 'REVISION_BTE', 'BTE_PAYMENT', 'COMPLETED', 'PAID'].includes(btoRow.status)
+    ? (pickLog(logs, (log) => log.tahap === 'sdm' && log.aksi === 'approve') || pickLog(logs, (log) => log.tahap === 'admin_dp' && log.aksi === 'approve'))
+    : null
   const ptLog = pickLog(logs, (log) => log.tahap === 'pemberi_tugas' && log.aksi === 'approve')
   
   let ptRow = null
@@ -342,29 +346,76 @@ async function renderSpdk(
   logs: SpdkLog[],
   stamp: AttendStampRow | null,
 ) {
-  const isApproved = logs.some((log) => log.aksi === 'approve' || log.aksi === 'issued')
-  const kabagLog = pickLog(logs, (log) => log.aksi === 'approve' || log.aksi === 'issued')
+  const isApproved = logs.some((log) => log.aksi === 'approve')
+  const kabagLog = pickLog(logs, (log) => log.aksi === 'approve')
   
+  let kabagNama = spdkRow.approverKabagNama || 'Ferdiansyah'
+  let kabagPosition = 'Kabag SDM & Sistem'
+
+  try {
+    const cfg = await ensureApproverSpdkConfig()
+    const resolvedKabag = await resolveSpdkApproverKabag(btoRow, cfg)
+    const kabagId = spdkRow.approverKabagId || resolvedKabag.id
+    if (kabagId) {
+      const cached = await db.query.localUserCache.findFirst({
+        where: or(eq(localUserCache.portalUserId, kabagId), eq(localUserCache.employeeId, kabagId))
+      })
+      const portalEmp = await fetchPortalEmployee(cached?.employeeId || kabagId)
+      if (portalEmp) {
+        kabagNama = portalEmp.namaLengkap || cached?.nama || kabagNama
+        const unitTipe = portalEmp.unitTipe ?? ''
+        const unitNama = portalEmp.unitNama ?? ''
+        let unitTitle = ''
+        if (unitTipe && unitNama) {
+          if (unitTipe.toLowerCase().startsWith('direktorat')) {
+            unitTitle = `Direktur ${unitNama}`
+          } else if (unitTipe.toLowerCase().startsWith('bagian')) {
+            unitTitle = `Kepala Bagian ${unitNama}`
+          } else {
+            unitTitle = `Kepala ${unitTipe} ${unitNama}`
+          }
+        } else {
+          unitTitle = portalEmp.jabatan || cached?.unitNama || kabagPosition
+        }
+        kabagPosition = unitTitle
+      } else if (cached) {
+        kabagNama = cached.nama || kabagNama
+        kabagPosition = cached.unitNama || kabagPosition
+      }
+    }
+  } catch (err) {
+    console.error('Failed resolving Kabag details for SPDK print', err)
+  }
+
   let kabagQr = null
   if (kabagLog && isApproved) {
-    const kabagQrText = `Disetujui Kabag SDM & Sistem: ${spdkRow.approverKabagNama || 'Ferdiansyah'}\nTanggal: ${dateTimeText(kabagLog.createdAt || spdkRow.createdAt)}`
+    const kabagQrText = `Disetujui ${kabagPosition}: ${kabagNama}\nTanggal: ${dateTimeText(kabagLog.createdAt || spdkRow.createdAt)}`
     kabagQr = await qrTextDataUrl(kabagQrText)
   }
 
-  const destinationQr = await qrDataUrl({
-    document: 'SPDK',
-    type: 'destination_attendance_stamp',
-    employeeName: btoRow.employeeNama ?? owner?.nama,
-    destinationName: btoRow.tujuanNama,
-    destinationAddress: btoRow.tujuanAlamat,
-    destinationLat: btoRow.tujuanLat,
-    destinationLng: btoRow.tujuanLng,
-    stampedLat: stamp?.stampLat ?? null,
-    stampedLng: stamp?.stampLng ?? null,
-    timestamp: isoText((stamp as any)?.stamped_at) ?? new Date().toISOString(),
-  })
+  let destinationQr = null
+  if (stamp) {
+    destinationQr = await qrDataUrl({
+      document: 'SPDK',
+      type: 'destination_attendance_stamp',
+      employeeName: btoRow.employeeNama ?? owner?.nama,
+      destinationName: btoRow.tujuanNama,
+      destinationAddress: btoRow.tujuanAlamat,
+      destinationLat: btoRow.tujuanLat,
+      destinationLng: btoRow.tujuanLng,
+      stampedLat: stamp.stampLat ?? null,
+      stampedLng: stamp.stampLng ?? null,
+      timestamp: stamp.stamped_at ? stamp.stamped_at.toISOString() : new Date().toISOString(),
+    })
+  }
 
-  return spdkPrintTemplate(btoRow, owner, spdkRow, logs, stamp, LOGO_SRC, esc, dateText, durationDays, kabagQr, destinationQr)
+  const printSpdkRow = {
+    ...spdkRow,
+    approverKabagNama: kabagNama,
+    approverKabagPosition: kabagPosition,
+  }
+
+  return spdkPrintTemplate(btoRow, owner, printSpdkRow, logs, stamp, LOGO_SRC, esc, dateText, durationDays, kabagQr, destinationQr)
 }
 
 async function renderDp(btoRow: BtoRow, owner: any, dpRow: any, logs: DpLog[]) {
@@ -509,6 +560,16 @@ async function assertDocumentAccess(btoRow: BtoRow, user: any, passedSpdkRow?: t
     if (id) userIds.add(String(id))
   }
 
+  // Resolve user's employeeId from localUserCache if user.employeeId is missing
+  if (user.sub && !user.employeeId) {
+    const cached = await db.query.localUserCache.findFirst({
+      where: eq(localUserCache.portalUserId, user.sub),
+    })
+    if (cached?.employeeId) {
+      userIds.add(String(cached.employeeId))
+    }
+  }
+
   const cacheRows = await Promise.all([
     user.sub ? db.query.localUserCache.findFirst({ where: eq(localUserCache.portalUserId, user.sub) }) : Promise.resolve(null),
     user.sub ? db.query.localUserCache.findFirst({ where: eq(localUserCache.employeeId, user.sub) }) : Promise.resolve(null),
@@ -531,7 +592,119 @@ async function assertDocumentAccess(btoRow: BtoRow, user: any, passedSpdkRow?: t
   }
   
   if (spdkRow && userIds.has(spdkRow.approverKabagId ?? '')) return
-  throw new AppError('Tidak diizinkan membuka dokumen ini', 403)
+
+  // 1. Dynamic check for resolved Kabag
+  try {
+    const cfg = await ensureApproverSpdkConfig()
+    if (cfg?.fixedEmployeeId && userIds.has(cfg.fixedEmployeeId)) return
+    const resolvedKabag = await resolveSpdkApproverKabag(btoRow, cfg)
+    if (resolvedKabag.id && userIds.has(resolvedKabag.id)) return
+  } catch (err) {
+    console.error('Failed dynamically asserting Kabag document access', err)
+  }
+
+  // 2. Supervisor / Atasan hierarchy chain check (traversing up 5 levels)
+  try {
+    const ownerCache = await db.query.localUserCache.findFirst({
+      where: eq(localUserCache.portalUserId, btoRow.employeeId),
+    })
+    const ownerEmployeeId = ownerCache?.employeeId || btoRow.employeeId
+    if (ownerEmployeeId) {
+      let currentEmployeeId: string | null | undefined = ownerEmployeeId
+      let iterations = 0
+      while (currentEmployeeId && iterations < 5) {
+        iterations++
+        const res = await fetch(
+          `${config.portal.apiUrl}/api/sso/employees?id=${currentEmployeeId}`,
+          { headers: { 'x-internal': config.portal.internalToken } }
+        )
+        if (!res.ok) break
+        const data = await res.json() as any
+        const currentEmp = data.data?.[0]
+        if (!currentEmp) break
+
+        const atasanId = currentEmp.atasanId
+        if (!atasanId) break
+
+        const cache = await db.query.localUserCache.findFirst({
+          where: eq(localUserCache.employeeId, atasanId),
+        })
+        
+        if (userIds.has(atasanId) || (cache?.portalUserId && userIds.has(cache.portalUserId))) {
+          return // Supervisor/Kabag/Kasi in hierarchy chain authorized!
+        }
+        currentEmployeeId = atasanId
+      }
+    }
+  } catch (err) {
+    console.error('Failed atasan chain authorization check', err)
+  }
+
+  // 3. Involvement check (if they ever acted on this BTO in logs)
+  try {
+    const userSub = user.sub
+    if (userSub) {
+      const btoLogs = await db.select().from(btoApprovalLog)
+        .where(
+          and(
+            eq(btoApprovalLog.btoId, btoRow.id),
+            eq(btoApprovalLog.actorId, userSub)
+          )
+        ).limit(1)
+      if (btoLogs.length > 0) return
+
+      if (spdkRow && spdkRow.id !== 'preview') {
+        const spdkLogs = await db.select().from(spdkApprovalLog)
+          .where(
+            and(
+              eq(spdkApprovalLog.spdkId, spdkRow.id),
+              eq(spdkApprovalLog.actorId, userSub)
+            )
+          ).limit(1)
+        if (spdkLogs.length > 0) return
+      }
+    }
+  } catch (err) {
+    console.error('Failed involvement authorization check', err)
+  }
+
+  // 4. Dashboard approvals list check
+  try {
+    const approvals = await listBtoApprovalsService({
+      id: user.sub,
+      employeeId: user.employeeId || null,
+      role: user.role ?? 'user',
+      gradeLevel: user.gradeLevel ?? null,
+    }, true)
+    if (approvals.some(b => b.id === btoRow.id)) return
+  } catch (err) {
+    console.error('Failed dashboard approvals check', err)
+  }
+
+  // 5. Dashboard approvals history check
+  try {
+    const history = await listBtoApprovalsHistoryService({
+      id: user.sub,
+      role: user.role ?? 'user',
+    })
+    if (history.some(b => b.id === btoRow.id)) return
+  } catch (err) {
+    console.error('Failed dashboard approvals history check', err)
+  }
+
+  const debugInfo = {
+    userIds: Array.from(userIds),
+    btoEmployeeId: btoRow.employeeId,
+    btoPemberiTugasId: btoRow.pemberiTugasId,
+    resolvedKabagId: null as string | null
+  }
+  try {
+    const cfg = await ensureApproverSpdkConfig()
+    const resolvedKabag = await resolveSpdkApproverKabag(btoRow, cfg)
+    debugInfo.resolvedKabagId = resolvedKabag.id
+  } catch (e) {}
+
+  throw new AppError(`Tidak diizinkan membuka dokumen ini. Debug: ${JSON.stringify(debugInfo)}`, 403)
 }
 
 export default async function documentRoutes(fastify: FastifyInstance) {
@@ -559,12 +732,44 @@ export default async function documentRoutes(fastify: FastifyInstance) {
   fastify.get('/spdk/:btoId', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { btoId } = paramsSchema.parse(req.params)
     const { btoRow, owner } = await loadBtoContext(btoId)
-    const [spdkRow] = await db.select().from(spdkTable).where(eq(spdkTable.btoId, btoId)).limit(1)
-    if (!spdkRow) throw new AppError('SPDK belum diterbitkan untuk BTO ini', 404)
+    let [spdkRow] = await db.select().from(spdkTable).where(eq(spdkTable.btoId, btoId)).limit(1)
+    if (!spdkRow) {
+      const roles = ((req.user as any).role ?? '').split(',')
+      const isAdminOrReviewer = roles.some((r: string) => ['super_admin', 'admin', 'sdm'].includes(r))
+      const isPemberiTugas = String((req.user as any).employeeId) === String(btoRow.pemberiTugasId)
+      const isOwner = String((req.user as any).employeeId) === String(btoRow.employeeId)
+      if (isAdminOrReviewer || isPemberiTugas || isOwner) {
+        const parts = (btoRow.nomorBto ?? '').split('/').map((part) => part.trim()).filter(Boolean)
+        const nomorSpdk = parts.length >= 5 
+          ? `${parts[0]}/${parts[1]}/SPDK/${parts[3]}/${parts[4]}`
+          : (btoRow.nomorBto ?? '').replace(/\/BTO\//i, '/SPDK/')
+        spdkRow = {
+          id: 'preview',
+          nomorSpdk: nomorSpdk || 'DRAFT-SPDK',
+          btoId: btoRow.id,
+          nomorBto: btoRow.nomorBto,
+          status: 'DRAFT',
+          diterbitkanOleh: null,
+          diterbitkanNama: null,
+          tanggalTerbit: null,
+          catatanAdmin: null,
+          approverKabagId: null,
+          approverKabagNama: 'Ferdiansyah',
+          tahun: new Date().getFullYear().toString(),
+          sequence: null,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }
+      } else {
+        throw new AppError('SPDK belum diterbitkan untuk BTO ini', 404)
+      }
+    }
     await assertDocumentAccess(btoRow, req.user, spdkRow)
-    const logs = await db.select().from(spdkApprovalLog)
-      .where(eq(spdkApprovalLog.spdkId, spdkRow.id))
-      .orderBy(desc(spdkApprovalLog.createdAt))
+    const logs = spdkRow.id === 'preview'
+      ? []
+      : await db.select().from(spdkApprovalLog)
+          .where(eq(spdkApprovalLog.spdkId, spdkRow.id))
+          .orderBy(desc(spdkApprovalLog.createdAt))
     const [stamp] = await db.select().from(attendStamp)
       .where(eq(attendStamp.btoId, btoId))
       .orderBy(desc(attendStamp.stamped_at))
@@ -576,12 +781,44 @@ export default async function documentRoutes(fastify: FastifyInstance) {
   fastify.get('/spdk/:btoId/pdf', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { btoId } = paramsSchema.parse(req.params)
     const { btoRow, owner } = await loadBtoContext(btoId)
-    const [spdkRow] = await db.select().from(spdkTable).where(eq(spdkTable.btoId, btoId)).limit(1)
-    if (!spdkRow) throw new AppError('SPDK belum diterbitkan untuk BTO ini', 404)
+    let [spdkRow] = await db.select().from(spdkTable).where(eq(spdkTable.btoId, btoId)).limit(1)
+    if (!spdkRow) {
+      const roles = ((req.user as any).role ?? '').split(',')
+      const isAdminOrReviewer = roles.some((r: string) => ['super_admin', 'admin', 'sdm'].includes(r))
+      const isPemberiTugas = String((req.user as any).employeeId) === String(btoRow.pemberiTugasId)
+      const isOwner = String((req.user as any).employeeId) === String(btoRow.employeeId)
+      if (isAdminOrReviewer || isPemberiTugas || isOwner) {
+        const parts = (btoRow.nomorBto ?? '').split('/').map((part) => part.trim()).filter(Boolean)
+        const nomorSpdk = parts.length >= 5 
+          ? `${parts[0]}/${parts[1]}/SPDK/${parts[3]}/${parts[4]}`
+          : (btoRow.nomorBto ?? '').replace(/\/BTO\//i, '/SPDK/')
+        spdkRow = {
+          id: 'preview',
+          nomorSpdk: nomorSpdk || 'DRAFT-SPDK',
+          btoId: btoRow.id,
+          nomorBto: btoRow.nomorBto,
+          status: 'DRAFT',
+          diterbitkanOleh: null,
+          diterbitkanNama: null,
+          tanggalTerbit: null,
+          catatanAdmin: null,
+          approverKabagId: null,
+          approverKabagNama: 'Ferdiansyah',
+          tahun: new Date().getFullYear().toString(),
+          sequence: null,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }
+      } else {
+        throw new AppError('SPDK belum diterbitkan untuk BTO ini', 404)
+      }
+    }
     await assertDocumentAccess(btoRow, req.user, spdkRow)
-    const logs = await db.select().from(spdkApprovalLog)
-      .where(eq(spdkApprovalLog.spdkId, spdkRow.id))
-      .orderBy(desc(spdkApprovalLog.createdAt))
+    const logs = spdkRow.id === 'preview'
+      ? []
+      : await db.select().from(spdkApprovalLog)
+          .where(eq(spdkApprovalLog.spdkId, spdkRow.id))
+          .orderBy(desc(spdkApprovalLog.createdAt))
     const [stamp] = await db.select().from(attendStamp)
       .where(eq(attendStamp.btoId, btoId))
       .orderBy(desc(attendStamp.stamped_at))

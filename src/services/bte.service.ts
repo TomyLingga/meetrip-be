@@ -83,11 +83,12 @@ export async function createOrUpdateBteService(
   }
 
   const canUserEdit =
+    btoRow.status === 'ATTENDED' ||
     btoRow.status === 'REPORT_UPLOADED' ||
     bteRow?.status === 'REVISION';
 
   if (!isAdmin && !canUserEdit) {
-    throw new AppError('BTE hanya bisa diisi setelah laporan diupload atau saat revisi BTE', 400);
+    throw new AppError('BTE hanya bisa diisi setelah absensi dihadiri (attended), laporan diupload atau saat revisi BTE', 400);
   }
   if (!isAdmin && bteRow && bteRow.status !== 'DRAFT' && bteRow.status !== 'REVISION') {
     throw new AppError(`BTE dengan status ${bteRow.status} tidak bisa diubah`, 400);

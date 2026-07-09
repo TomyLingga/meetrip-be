@@ -75,7 +75,7 @@ export default async function bteRoutes(fastify: FastifyInstance) {
     const { btoId } = req.params as { btoId: string };
     const data = bteUpsertSchema.parse(req.body);
     const actor = { id: req.user.sub, nama: req.user.nama || '', gradeLevel: req.user.gradeLevel };
-    const isAdmin = ['super_admin', 'admin'].includes(req.user.role || '');
+    const isAdmin = (req.user.role || '').split(',').some(r => ['super_admin', 'admin'].includes(r));
     const result = await createOrUpdateBteService(btoId, actor, isAdmin, {
       ...data,
       tglBerangkat: data.tglBerangkat ? new Date(data.tglBerangkat) : undefined,
@@ -142,17 +142,18 @@ export default async function bteRoutes(fastify: FastifyInstance) {
     const [btoRow] = await db.select().from(bto).where(eq(bto.id, btoId)).limit(1);
     if (!btoRow) throw new AppError('BTO tidak ditemukan', 404);
 
-    const isAdmin = ['super_admin', 'admin'].includes(req.user.role || '');
+    const isAdmin = (req.user.role || '').split(',').some(r => ['super_admin', 'admin'].includes(r));
     if (!isAdmin && btoRow.employeeId !== req.user.sub) {
       throw new AppError('Tidak diizinkan mengupload kuitansi BTE ini', 403);
     }
 
     const existingBte = await db.query.bte.findFirst({ where: eq(bte.btoId, btoId) });
     const canUpload =
+      btoRow.status === 'ATTENDED' ||
       btoRow.status === 'REPORT_UPLOADED' ||
       existingBte?.status === 'REVISION';
     if (!isAdmin && !canUpload) {
-      throw new AppError('Kuitansi hanya bisa diupload saat pengisian atau revisi BTE', 400);
+      throw new AppError('Kuitansi hanya bisa diupload setelah absen dihadiri (attended), pengisian BTE, atau revisi BTE', 400);
     }
 
     const data = await req.file();
@@ -202,7 +203,7 @@ export default async function bteRoutes(fastify: FastifyInstance) {
   fastify.post('/:id/submit', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const actor = { id: req.user.sub, nama: req.user.nama || '' };
-    const isAdmin = ['super_admin', 'admin'].includes(req.user.role || '');
+    const isAdmin = (req.user.role || '').split(',').some(r => ['super_admin', 'admin'].includes(r));
     const result = await submitBteService(id, actor, isAdmin);
     return reply.send(ok({ message: 'BTE diajukan', ...result }));
   });
