@@ -11,6 +11,7 @@ const dpUpsertSchema = z.object({
     z.object({
       rincianId: z.string().uuid(),
       rincianLabel: z.string().optional(),
+      kategori: z.string().optional(),
       jumlahHari: z.number().int().min(1),
       nilaiPerHari: z.number().min(0),
       nilaiTotal: z.number().min(0),

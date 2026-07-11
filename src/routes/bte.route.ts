@@ -21,6 +21,7 @@ const bteUpsertSchema = z.object({
     z.object({
       rincianId: z.string().uuid(),
       rincianLabel: z.string().optional(),
+      kategori: z.string().optional(),
       jumlahHari: z.number().int().min(1),
       nilaiPerHari: z.number().min(0),
       nilaiTotal: z.number().min(0),
@@ -151,6 +152,7 @@ export default async function bteRoutes(fastify: FastifyInstance) {
     const canUpload =
       btoRow.status === 'ATTENDED' ||
       btoRow.status === 'REPORT_UPLOADED' ||
+      btoRow.status === 'BTE_DRAFT' ||
       existingBte?.status === 'REVISION';
     if (!isAdmin && !canUpload) {
       throw new AppError('Kuitansi hanya bisa diupload setelah absen dihadiri (attended), pengisian BTE, atau revisi BTE', 400);

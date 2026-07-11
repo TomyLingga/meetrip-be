@@ -336,7 +336,7 @@
                                                 <label style="font-size:11px;"></label>
                                         </td>
                                         <td class="text-center">
-                                                <label style="font-size:11px;">Sign by Personalia: <strong style="font-style:italic;">GA Administrator</strong></label>
+                                                <label style="font-size:11px;">Sign by Personalia: <strong style="font-style:italic;"><?= $personaliaName ?? 'GA Administrator' ?></strong></label>
                                         </td>
                                 </tr>
                         </thead>

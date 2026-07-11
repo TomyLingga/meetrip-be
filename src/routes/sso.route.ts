@@ -3,10 +3,6 @@ import { FastifyInstance } from 'fastify'
 import { z }              from 'zod'
 import { loginSsoService, refreshSsoTokenService, logoutSsoService } from '../services/sso.service'
 import { ok } from '../utils/response'
-import { db } from '../db/connection'
-import { localUserCache } from '../db/schema'
-import { eq } from 'drizzle-orm'
-import { reverseGeocode } from '../services/geocoding.service'
 
 const loginSchema = z.object({
   ssoToken: z.string().min(1, 'ssoToken wajib diisi'),
@@ -56,29 +52,8 @@ export default async function ssoRoutes(fastify: FastifyInstance) {
     return reply.send(ok(req.user))
   })
 
-  /**
-   * POST /api/auth/update-location
-   * Update lokasi penempatan koordinat user secara real-time
-   */
-  fastify.post('/update-location', { preHandler: [fastify.authenticate] }, async (req, reply) => {
-    const { lat, lng } = z.object({
-      lat: z.number(),
-      lng: z.number(),
-    }).parse(req.body)
-
-    const portalUserId = req.user.sub
-
-    const geo = await reverseGeocode(Number(lat), Number(lng)).catch(() => ({ provinsi: null, negara: 'Indonesia', alamat: '' }))
-
-    await db.update(localUserCache)
-      .set({
-        penempatanLat: String(lat),
-        penempatanLng: String(lng),
-        penempatanProvinsi: geo.provinsi,
-        lastSync: new Date(),
-      })
-      .where(eq(localUserCache.portalUserId, portalUserId))
-
-    return reply.send(ok({ success: true, provinsi: geo.provinsi }))
-  })
+  // NOTE: Endpoint 'update-location' (real-time GPS) sudah dihapus.
+  // Acuan wilayah dinas sekarang SELALU memakai lokasi penempatan RESMI karyawan
+  // (ref_penempatan_area dari Portal SSO), bukan lokasi GPS user saat ini —
+  // lihat `resolveEmployeePenempatan()` di geocoding.service.ts.
 }

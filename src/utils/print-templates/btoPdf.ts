@@ -35,6 +35,7 @@ export function btoPrintTemplate(btoRow: any, owner: any, pemberiTugasRow: any, 
                 body {
                         font-family: "Times New Roman", Times, serif;
                         font-size: 11px;
+                        line-height: 1.6;
                         color: black;
                         margin: 0;
                         padding: 0;
@@ -125,7 +126,7 @@ export function btoPrintTemplate(btoRow: any, owner: any, pemberiTugasRow: any, 
                         table-layout: fixed;
                 }
                 .form-table td {
-                        padding: 4px 0;
+                        padding: 6px 0;
                         vertical-align: top;
                         font-size: 11px;
                 }
@@ -305,8 +306,8 @@ export function btoPrintTemplate(btoRow: any, owner: any, pemberiTugasRow: any, 
                                                 <div class="sig-position">${esc(formatUnitFull(pemberiTugasRow?.unitTipe, pemberiTugasRow?.unitNama))}</div>
                                         </td>
                                         <td>
-                                                <div class="sig-name">${esc(sdmName || 'admin-sdm')}</div>
-                                                <div class="sig-position">${formatUnitFull(sdmLog?.unitTipe, sdmLog?.unitNama) !== '-' ? esc(formatUnitFull(sdmLog?.unitTipe, sdmLog?.unitNama)) : 'ADM-SDM'}</div>
+                                                <div class="sig-name">${esc(sdmName || 'ADM-SDM')}</div>
+                                                <div class="sig-position">Bagian SDM</div>
                                         </td>
                                 </tr>
                         </table>

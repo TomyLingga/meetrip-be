@@ -40,6 +40,7 @@ export async function createOrUpdateBteService(
     rincian: Array<{
       rincianId: string;
       rincianLabel?: string;
+      kategori?: string;
       jumlahHari: number;
       nilaiPerHari: number;
       nilaiTotal: number;
@@ -85,6 +86,7 @@ export async function createOrUpdateBteService(
   const canUserEdit =
     btoRow.status === 'ATTENDED' ||
     btoRow.status === 'REPORT_UPLOADED' ||
+    btoRow.status === 'BTE_DRAFT' ||
     bteRow?.status === 'REVISION';
 
   if (!isAdmin && !canUserEdit) {
@@ -186,6 +188,15 @@ export async function createOrUpdateBteService(
     await db.update(bte).set(bteData).where(eq(bte.id, bteRow.id));
   }
 
+  // Tandai BTO sebagai 'BTE_DRAFT' begitu user mulai menyusun realisasi BTE,
+  // sebelum benar-benar dikirim (submit) ke admin untuk direview.
+  if (!isAdmin && (btoRow.status === 'ATTENDED' || btoRow.status === 'REPORT_UPLOADED')) {
+    await db.update(bto).set({
+      status: 'BTE_DRAFT',
+      updatedAt: new Date(),
+    }).where(eq(bto.id, btoId));
+  }
+
   // Clear existing items and insert new ones
   await db.delete(bteRincian).where(eq(bteRincian.bteId, bteRow.id));
   if (data.rincian.length > 0) {
@@ -194,6 +205,7 @@ export async function createOrUpdateBteService(
         bteId: bteRow!.id,
         rincianId: r.rincianId,
         rincianLabel: r.rincianLabel,
+        kategori: r.kategori || 'lain_lain',
         jumlahHari: r.jumlahHari,
         nilaiPerHari: String(r.nilaiPerHari),
         nilaiTotal: String(r.nilaiTotal),

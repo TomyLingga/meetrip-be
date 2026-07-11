@@ -5,7 +5,7 @@ import { bto, btoApprovalLog, dp, dpApprovalLog, localUserCache, configPemberiTu
 import { eq, desc, and, gte, lte, like, or, sql, inArray } from 'drizzle-orm'
 import { AppError }  from '../utils/errorHandler'
 import { generateNomor } from '../utils/romanNumeral'
-import { reverseGeocode, getWilayahTipe, haversineKm } from './geocoding.service'
+import { reverseGeocode, getWilayahTipe, haversineKm, resolveEmployeePenempatan } from './geocoding.service'
 import { config as appConfig } from '../config/env'
 import { getGradeIdByLevel, hitungDurasiHariMalam, validateRincianAgainstPagu } from './pagu.service'
 import { ensureApproverSpdkConfig, resolveSpdkApproverKabag } from './spdk.service'
@@ -222,47 +222,16 @@ export async function submitBtoService(id: string, actor: { id: string; nama: st
     tujuanNama: existing.tujuanNama,
   })
 
-  // Dapatkan penempatan area user
+  // Dapatkan lokasi penempatan RESMI user (selalu di-refresh dari Portal), acuan utama wilayah & jarak
   const userCache = await db.query.localUserCache.findFirst({
     where: eq(localUserCache.portalUserId, actor.id),
   })
-
-  let penempatanLat = userCache?.penempatanLat ?? null
-  let penempatanLng = userCache?.penempatanLng ?? null
-
-  if (userCache?.employeeId) {
-    try {
-      const portalRes = await fetch(`${appConfig.portal.apiUrl}/api/sso/employees?id=${userCache.employeeId}`, {
-        headers: { 'x-internal': appConfig.portal.internalToken },
-      })
-      if (portalRes.ok) {
-        const body = await portalRes.json() as { data: any[] }
-        const rows = body.data ?? []
-        if (rows.length > 0) {
-          const empData = rows[0]
-          if (empData.penempatanLat && empData.penempatanLng) {
-            penempatanLat = empData.penempatanLat
-            penempatanLng = empData.penempatanLng
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Gagal mengambil data koordinat penempatan dari Portal:', err)
-    }
-  }
-
-  let userProvinsi: string | null = null
-  if (penempatanLat && penempatanLng) {
-    try {
-      const userGeo = await reverseGeocode(Number(penempatanLat), Number(penempatanLng))
-      userProvinsi = userGeo.provinsi
-    } catch (err) {
-      console.error('Failed to reverse geocode user penempatan area:', err)
-    }
-  }
+  const { lat: penempatanLat, lng: penempatanLng, provinsi: userProvinsi } = await resolveEmployeePenempatan(actor.id)
 
   const tujuanNegara = geo.negara ?? fallbackNegaraFromWilayah(existing.wilayahTipe)
-  const wilayah = existing.wilayahTipe || getWilayahTipe(
+  // Wilayah final selalu dihitung kembali dari koordinat dan provinsi. Nilai pada
+  // draft hanya bersifat preview agar hasil lama yang keliru tidak ikut terkunci.
+  const wilayah = getWilayahTipe(
     userProvinsi,
     geo.provinsi,
     tujuanNegara,
@@ -272,10 +241,10 @@ export async function submitBtoService(id: string, actor: { id: string; nama: st
   let jarakKm: number | undefined
   if (existing.jarakKm) {
     jarakKm = Number(existing.jarakKm)
-  } else if (penempatanLat && penempatanLng) {
+  } else if (penempatanLat != null && penempatanLng != null) {
     jarakKm = haversineKm(
-      Number(penempatanLat), Number(penempatanLng),
-      Number(existing.tujuanLat),      Number(existing.tujuanLng),
+      penempatanLat, penempatanLng,
+      Number(existing.tujuanLat), Number(existing.tujuanLng),
     )
   }
 
@@ -605,18 +574,11 @@ export async function listBtoApprovalsService(actor: { id: string; employeeId?: 
       const resolvedKabag = await resolveSpdkApproverKabag(btoRow, cfg)
       const resolvedKabagId = resolvedKabag.id
 
-      if (resolvedKabagId) {
-        // Patch the SPDK row with the resolved kabag id
-        await db.update(spdk).set({
-          approverKabagId: resolvedKabagId,
-          approverKabagNama: resolvedKabag.nama ?? undefined,
-        }).where(eq(spdk.id, s.spdkId))
-        s.approverKabagId = resolvedKabagId
-      } else if (cfg?.fixedEmployeeId) {
-        // Last resort: use fixed person from config
-        await db.update(spdk).set({ approverKabagId: cfg.fixedEmployeeId }).where(eq(spdk.id, s.spdkId))
-        s.approverKabagId = cfg.fixedEmployeeId
-      }
+      await db.update(spdk).set({
+        approverKabagId: resolvedKabagId,
+        approverKabagNama: resolvedKabag.nama,
+      }).where(eq(spdk.id, s.spdkId))
+      s.approverKabagId = resolvedKabagId
     } catch (err) {
       console.error('Self-heal approverKabagId failed for SPDK', s.spdkId, err)
     }
@@ -628,10 +590,10 @@ export async function listBtoApprovalsService(actor: { id: string; employeeId?: 
       if (!btoRow) continue
 
       const resolvedKabag = await resolveSpdkApproverKabag(btoRow, cfg)
-      if (resolvedKabag.id && resolvedKabag.id !== s.approverKabagId) {
+      if (resolvedKabag.id !== s.approverKabagId) {
         await db.update(spdk).set({
           approverKabagId: resolvedKabag.id,
-          approverKabagNama: resolvedKabag.nama ?? undefined,
+          approverKabagNama: resolvedKabag.nama,
         }).where(eq(spdk.id, s.spdkId))
         s.approverKabagId = resolvedKabag.id
       }
@@ -669,7 +631,7 @@ export async function listBtoApprovalsService(actor: { id: string; employeeId?: 
     )
   }
 
-  if (cfg?.fixedEmployeeId && actorIdentifiers.includes(cfg.fixedEmployeeId)) {
+  if (cfg?.mode === 'fixed_person' && cfg?.fixedEmployeeId && actorIdentifiers.includes(cfg.fixedEmployeeId)) {
     roleConditions.push(
       eq(bto.status, 'KABAG_REVIEW')
     )
@@ -698,13 +660,18 @@ export async function listBtoApprovalsService(actor: { id: string; employeeId?: 
 
 // ─── List BTO Approvals History ──────────────────────────────────────────────
 export async function listBtoApprovalsHistoryService(actor: { id: string; role: string }) {
-  const isAdmin = (actor.role || '').split(',').some(r => ['super_admin', 'admin', 'sdm'].includes(r))
+  const userCache = await db.query.localUserCache.findFirst({
+    where: eq(localUserCache.portalUserId, actor.id),
+  })
+  const isBom1 = userCache?.gradeKode === 'BOM-1'
+  const isAdmin = (actor.role || '').split(',').some(r => ['super_admin', 'admin', 'sdm'].includes(r)) || isBom1
 
   // Base BTO logs
   let btoLogsQuery = db.select({
     logId: btoApprovalLog.id,
     btoId: bto.id,
     nomorBto: bto.nomorBto,
+    employeeId: bto.employeeId,
     employeeNama: bto.employeeNama,
     pemberiTugasNama: bto.pemberiTugasNama,
     tujuanNama: bto.tujuanNama,
@@ -734,6 +701,7 @@ export async function listBtoApprovalsHistoryService(actor: { id: string; role: 
     spdkId: spdk.id,
     btoId: bto.id,
     nomorBto: bto.nomorBto,
+    employeeId: bto.employeeId,
     employeeNama: bto.employeeNama,
     pemberiTugasNama: bto.pemberiTugasNama,
     tujuanNama: bto.tujuanNama,
@@ -761,7 +729,9 @@ export async function listBtoApprovalsHistoryService(actor: { id: string; role: 
   const allLogs = [
     ...btoLogsResult.map(row => ({
       id: `bto-${row.logId}`,
+      btoId: row.btoId,
       nomorBto: row.nomorBto,
+      employeeId: row.employeeId,
       employeeNama: row.employeeNama,
       pemberiTugasNama: row.pemberiTugasNama,
       tujuanNama: row.tujuanNama || '',
@@ -777,7 +747,9 @@ export async function listBtoApprovalsHistoryService(actor: { id: string; role: 
     })),
     ...spdkLogsResult.map(row => ({
       id: `spdk-${row.logId}`,
+      btoId: row.btoId,
       nomorBto: row.nomorBto,
+      employeeId: row.employeeId,
       employeeNama: row.employeeNama,
       pemberiTugasNama: row.pemberiTugasNama,
       tujuanNama: row.tujuanNama || '',

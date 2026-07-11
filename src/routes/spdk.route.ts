@@ -1,7 +1,15 @@
 // ─── Routes: SPDK & Attend Stamp ─────────────────────────────────────────────
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { issueSpdkService, rejectSpdkDraftService, kabagApproveSpdkService, attendStampService, updateSpdkService, getAttendRadiusMeter } from '../services/spdk.service';
+import {
+  attendStampService,
+  issueSpdkService,
+  kabagApproveSpdkService,
+  rejectSpdkDraftService,
+  updateSpdkService,
+  getAttendRadiusMeter,
+  checkIfUserIsSpdkApprover
+} from '../services/spdk.service';
 
 import { db } from '../db/connection';
 import { spdk, spdkApprovalLog } from '../db/schema';
@@ -20,6 +28,11 @@ export default async function spdkRoutes(fastify: FastifyInstance) {
     return reply.send(ok({ radiusMeter: await getAttendRadiusMeter() }));
   });
   
+  fastify.get('/is-approver', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const isApprover = await checkIfUserIsSpdkApprover(req.user.sub, req.user.employeeId);
+    return reply.send(ok({ isApprover }));
+  });
+
   /** POST /api/spdk/bto/:btoId — Issue SPDK (Admin only) */
   fastify.post('/bto/:btoId', { preHandler: [fastify.authenticateAdmin] }, async (req, reply) => {
     const { btoId } = req.params as { btoId: string };

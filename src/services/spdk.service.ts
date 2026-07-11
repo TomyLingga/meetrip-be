@@ -2,7 +2,7 @@
 // ─── SPDK Service ─────────────────────────────────────────────────────────────
 import { db }          from '../db/connection'
 import { spdk, spdkApprovalLog, bto, btoApprovalLog, attendStamp, configApproverSpdk, configSistem, localUserCache } from '../db/schema'
-import { eq, sql }     from 'drizzle-orm'
+import { eq, sql, inArray } from 'drizzle-orm'
 import { AppError }    from '../utils/errorHandler'
 import { generateNomor, nomorSpdkFromBto } from '../utils/romanNumeral'
 import { haversineKm } from './geocoding.service'
@@ -73,18 +73,33 @@ async function getUserIdentifierVariants(id?: string | null) {
   if (id) identifiers.add(id)
 
   if (id) {
-    const byPortalId = await db.query.localUserCache.findFirst({
-      where: eq(localUserCache.portalUserId, id),
-    })
-    if (byPortalId?.employeeId) identifiers.add(byPortalId.employeeId)
+    const matches = await Promise.all([
+      db.query.localUserCache.findFirst({ where: eq(localUserCache.id, id) }),
+      db.query.localUserCache.findFirst({ where: eq(localUserCache.portalUserId, id) }),
+      db.query.localUserCache.findFirst({ where: eq(localUserCache.employeeId, id) }),
+    ])
 
-    const byEmployeeId = await db.query.localUserCache.findFirst({
-      where: eq(localUserCache.employeeId, id),
-    })
-    if (byEmployeeId?.portalUserId) identifiers.add(byEmployeeId.portalUserId)
+    for (const match of matches) {
+      if (!match) continue
+      identifiers.add(match.id)
+      identifiers.add(match.portalUserId)
+      if (match.employeeId) identifiers.add(match.employeeId)
+    }
   }
 
   return Array.from(identifiers)
+}
+
+async function isSameUser(firstId?: string | null, secondId?: string | null) {
+  if (!firstId || !secondId) return false
+  if (firstId === secondId) return true
+
+  const [firstIdentifiers, secondIdentifiers] = await Promise.all([
+    getUserIdentifierVariants(firstId),
+    getUserIdentifierVariants(secondId),
+  ])
+  const secondSet = new Set(secondIdentifiers)
+  return firstIdentifiers.some((identifier) => secondSet.has(identifier))
 }
 
 async function isActorBom1Approver(actor: { id: string; employeeId?: string | null; gradeLevel?: number | null }) {
@@ -124,6 +139,28 @@ async function isActorBom1Approver(actor: { id: string; employeeId?: string | nu
   return false
 }
 
+export async function checkIfUserIsSpdkApprover(portalUserId: string, employeeId?: string | null): Promise<boolean> {
+  const cfg = await ensureApproverSpdkConfig()
+  const identifiers = [portalUserId, employeeId].filter((id): id is string => Boolean(id))
+
+  if (cfg.mode === 'fixed_person' && cfg.fixedEmployeeId) {
+    if (identifiers.includes(cfg.fixedEmployeeId)) return true
+  } else {
+    // Jika tidak ada fixedEmployeeId, KABAG SPDK dihandle oleh BOM-1
+    const actor = { id: portalUserId, employeeId }
+    const isBom1 = await isActorBom1Approver(actor)
+    if (isBom1) return true
+  }
+
+  // Cek apakah user pernah/sedang menjadi approver di SPDK manapun (untuk historikal)
+  const spdkRows = await db.select({ id: spdk.id })
+    .from(spdk)
+    .where(inArray(spdk.approverKabagId, identifiers))
+    .limit(1)
+
+  return spdkRows.length > 0
+}
+
 export async function ensureApproverSpdkConfig() {
   const [row] = await db.select().from(configApproverSpdk).where(eq(configApproverSpdk.isActive, true)).limit(1)
   if (row) return row
@@ -160,10 +197,13 @@ export async function resolveSpdkApproverKabag(
     })
 
     const ownerEmployeeId = ownerCache?.employeeId
-    if (!ownerEmployeeId) return { id: cfg?.fixedEmployeeId ?? null, nama: null }
+    if (!ownerEmployeeId) return { id: null, nama: null }
 
     let currentEmployeeId: string | null | undefined = ownerEmployeeId
     let iterations = 0
+    let firstAtasan: any = null
+    let firstAtasanId: string | null = null
+
     while (currentEmployeeId && iterations < 5) {
       iterations++
       const currentEmp = await fetchPortalEmployee(currentEmployeeId)
@@ -175,10 +215,15 @@ export async function resolveSpdkApproverKabag(
       const atasan = await fetchPortalEmployee(atasanId)
       if (!atasan) break
 
+      if (iterations === 1) {
+        firstAtasan = atasan
+        firstAtasanId = atasanId
+      }
+
       if (isBom1Approver(atasan)) {
         const resolvedId = await resolvePortalUserId(atasan, atasanId)
         return {
-          id: resolvedId ?? cfg?.fixedEmployeeId ?? null,
+          id: resolvedId ?? null,
           nama: atasan.namaLengkap ?? null,
         }
       }
@@ -186,10 +231,18 @@ export async function resolveSpdkApproverKabag(
       currentEmployeeId = atasanId
     }
 
-    return { id: cfg?.fixedEmployeeId ?? null, nama: null }
+    if (firstAtasan && firstAtasanId) {
+      const resolvedId = await resolvePortalUserId(firstAtasan, firstAtasanId)
+      return {
+        id: resolvedId ?? null,
+        nama: firstAtasan.namaLengkap ?? null,
+      }
+    }
+
+    return { id: null, nama: null }
   } catch (err) {
     console.error('Failed to resolve Kabag (unit_head) from Portal SSO:', err)
-    return { id: cfg?.fixedEmployeeId ?? null, nama: null }
+    return { id: null, nama: null }
   }
 }
 
@@ -223,8 +276,7 @@ export async function issueSpdkService(
   const approverKabagId = approverKabag.id
 
   // Cek apakah pemberi tugas = approver Kabag → auto approve
-  const approverIdentifiers = approverKabagId ? await getUserIdentifierVariants(approverKabagId) : []
-  const autoApprove = Boolean(btoRow.pemberiTugasId && approverIdentifiers.includes(btoRow.pemberiTugasId))
+  const autoApprove = await isSameUser(btoRow.pemberiTugasId, approverKabagId)
 
   // Generate nomor SPDK
   const now      = new Date()
@@ -276,19 +328,21 @@ export async function issueSpdkService(
   })
 
   if (autoApprove) {
+    const autoApproverId = approverKabagId ?? btoRow.pemberiTugasId ?? actor.id
+    const autoApproverNama = approverKabag.nama ?? btoRow.pemberiTugasNama ?? actor.nama
     await db.insert(spdkApprovalLog).values({
       spdkId:    inserted.id,
       aksi:      'approve',
-      actorId:   actor.id,
-      actorNama: actor.nama,
+      actorId:   autoApproverId,
+      actorNama: autoApproverNama,
       catatan:   'Auto-approved: Pemberi tugas = Kabag SPDK approver',
     })
     await db.insert(btoApprovalLog).values({
       btoId,
       tahap:      'persetujuan_spdk',
       aksi:       'auto_approve',
-      actorId:    actor.id,
-      actorNama:  actor.nama,
+      actorId:    autoApproverId,
+      actorNama:  autoApproverNama,
       statusDari: 'KABAG_REVIEW',
       statusKe:   'ACTIVE',
       catatan:    'Persetujuan SPDK dilewati otomatis karena pemberi tugas sama dengan approver SPDK',

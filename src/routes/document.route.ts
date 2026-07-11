@@ -17,6 +17,7 @@ import {
   spdk as spdkTable,
   spdkApprovalLog,
   refTransport,
+  refRincianBiaya,
 } from '../db/schema'
 import { AppError } from '../utils/errorHandler'
 import { config } from '../config/env'
@@ -41,12 +42,21 @@ type BteLog = typeof bteApprovalLog.$inferSelect
 type AttendStampRow = typeof attendStamp.$inferSelect
 
 let LOGO_SRC = ''
+let LOGO_RIGHT_SRC = ''
 try {
   const logoPath = path.join(process.cwd(), 'uploads', 'documents', 'inl.png')
   const logoBase64 = fs.readFileSync(logoPath).toString('base64')
   LOGO_SRC = `data:image/png;base64,${logoBase64}`
 } catch (e) {
   LOGO_SRC = ''
+}
+
+try {
+  const logoRightPath = path.join(process.cwd(), 'contoh', 'logo_INL_right.png')
+  const logoRightBase64 = fs.readFileSync(logoRightPath).toString('base64')
+  LOGO_RIGHT_SRC = `data:image/png;base64,${logoRightBase64}`
+} catch (e) {
+  LOGO_RIGHT_SRC = ''
 }
 
 const monthFormatter = new Intl.DateTimeFormat('id-ID', {
@@ -296,7 +306,7 @@ function tripSection(btoRow: BtoRow) {
 }
 
 async function renderBto(btoRow: BtoRow, owner: any, logs: BtoLog[]) {
-  const sdmLog = ['SPDK_DRAFT', 'KABAG_REVIEW', 'ACTIVE', 'ATTENDED', 'REPORT_UPLOADED', 'ADMIN_BTE_REVIEW', 'REVISION_BTE', 'BTE_PAYMENT', 'COMPLETED', 'PAID'].includes(btoRow.status)
+  const sdmLog = ['SPDK_DRAFT', 'KABAG_REVIEW', 'ACTIVE', 'ATTENDED', 'REPORT_UPLOADED', 'BTE_DRAFT', 'ADMIN_BTE_REVIEW', 'REVISION_BTE', 'BTE_PAYMENT', 'COMPLETED', 'PAID'].includes(btoRow.status)
     ? (pickLog(logs, (log) => log.tahap === 'sdm' && log.aksi === 'approve') || pickLog(logs, (log) => log.tahap === 'admin_dp' && log.aksi === 'approve'))
     : null
   const ptLog = pickLog(logs, (log) => log.tahap === 'pemberi_tugas' && log.aksi === 'approve')
@@ -349,7 +359,7 @@ async function renderSpdk(
   const isApproved = logs.some((log) => log.aksi === 'approve')
   const kabagLog = pickLog(logs, (log) => log.aksi === 'approve')
   
-  let kabagNama = spdkRow.approverKabagNama || 'Ferdiansyah'
+  let kabagNama = spdkRow.approverKabagNama
   let kabagPosition = 'Kabag SDM & Sistem'
 
   try {
@@ -395,18 +405,9 @@ async function renderSpdk(
 
   let destinationQr = null
   if (stamp) {
-    destinationQr = await qrDataUrl({
-      document: 'SPDK',
-      type: 'destination_attendance_stamp',
-      employeeName: btoRow.employeeNama ?? owner?.nama,
-      destinationName: btoRow.tujuanNama,
-      destinationAddress: btoRow.tujuanAlamat,
-      destinationLat: btoRow.tujuanLat,
-      destinationLng: btoRow.tujuanLng,
-      stampedLat: stamp.stampLat ?? null,
-      stampedLng: stamp.stampLng ?? null,
-      timestamp: stamp.stamped_at ? stamp.stamped_at.toISOString() : new Date().toISOString(),
-    })
+    const stampDate = stamp.stamped_at ? stamp.stamped_at : new Date()
+    const destinationQrText = `Dokumen: SPDK\nKaryawan: ${btoRow.employeeNama ?? owner?.nama ?? '-'}\nLokasi Tujuan: ${btoRow.tujuanNama ?? '-'}\nKoordinat Tujuan: ${btoRow.tujuanLat ?? '-'}, ${btoRow.tujuanLng ?? '-'}\nKoordinat Absen: ${stamp.stampLat ?? '-'}, ${stamp.stampLng ?? '-'}\nWaktu Absen: ${dateTimeText(stampDate)}`
+    destinationQr = await qrTextDataUrl(destinationQrText)
   }
 
   const printSpdkRow = {
@@ -415,7 +416,7 @@ async function renderSpdk(
     approverKabagPosition: kabagPosition,
   }
 
-  return spdkPrintTemplate(btoRow, owner, printSpdkRow, logs, stamp, LOGO_SRC, esc, dateText, durationDays, kabagQr, destinationQr)
+  return spdkPrintTemplate(btoRow, owner, printSpdkRow, logs, stamp, LOGO_RIGHT_SRC, esc, dateText, durationDays, kabagQr, destinationQr)
 }
 
 async function renderDp(btoRow: BtoRow, owner: any, dpRow: any, logs: DpLog[]) {
@@ -448,6 +449,19 @@ async function renderDp(btoRow: BtoRow, owner: any, dpRow: any, logs: DpLog[]) {
   if (financeLog && btoRow.status !== 'ADMIN_DP_REVIEW') {
     const financeQrText = `Disetujui Keuangan: ${financeLog.actorNama}\nTanggal: ${dateTimeText(financeLog.createdAt)}`
     financeQr = await qrTextDataUrl(financeQrText)
+  }
+
+  // Update dpRincian with the latest kategori from ref_rincian_biaya
+  if (dpRow && Array.isArray(dpRow.dpRincian)) {
+    const allRefRincian = await db.select().from(refRincianBiaya);
+    const rincianMap = new Map(allRefRincian.map(r => [r.id, r]));
+    dpRow.dpRincian = dpRow.dpRincian.map((item: any) => {
+      const ref = rincianMap.get(item.rincianId);
+      return {
+        ...item,
+        kategori: ref?.kategori || item.kategori,
+      };
+    });
   }
 
   const spdkRow = await db.query.spdk.findFirst({ where: eq(spdkTable.btoId, btoRow.id) })
@@ -754,7 +768,7 @@ export default async function documentRoutes(fastify: FastifyInstance) {
           tanggalTerbit: null,
           catatanAdmin: null,
           approverKabagId: null,
-          approverKabagNama: 'Ferdiansyah',
+          approverKabagNama: null,
           tahun: new Date().getFullYear().toString(),
           sequence: null,
           createdAt: new Date(),
@@ -803,7 +817,7 @@ export default async function documentRoutes(fastify: FastifyInstance) {
           tanggalTerbit: null,
           catatanAdmin: null,
           approverKabagId: null,
-          approverKabagNama: 'Ferdiansyah',
+          approverKabagNama: null,
           tahun: new Date().getFullYear().toString(),
           sequence: null,
           createdAt: new Date(),

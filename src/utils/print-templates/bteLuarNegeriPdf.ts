@@ -20,20 +20,52 @@ export function bteLuarNegeriPrintTemplate(data: any) {
         // Helper to match database rincian items to their corresponding layout category
         const isBteDollar = (bteRow?.bteRincian || []).some((r: any) => r.useDollar);
 
-        const findVal = (keywords: string[], excludeKeywords: string[] = []) => {
-                const item = (bteRow?.bteRincian || []).find((r: any) => {
-                        const lbl = (r.rincianLabel || '').toLowerCase();
-                        const matches = keywords.some(k => lbl.includes(k));
-                        const excluded = excludeKeywords.some(k => lbl.includes(k));
-                        return matches && !excluded;
-                });
-                if (!item) return 0;
-                return isBteDollar && item.useDollar ? Number(item.nilaiUsd) || 0 : Number(item.nilaiTotal) || 0;
+        const rincianList = bteRow?.bteRincian || [];
+        const formatKategoriName = (kat: string) => {
+                switch (kat) {
+                        case 'saku': return 'POCKET MONEY / UANG SAKU';
+                        case 'hotel': return 'HOTEL / ACCOMMODATION';
+                        case 'laundry': return 'LAUNDRY';
+                        case 'transport': return 'TRANSPORTATION / TICKET';
+                        case 'lain_lain': return 'OTHERS / BIAYA LAIN';
+                        default: return kat.toUpperCase();
+                }
         };
 
-        const pocketVal = findVal(['pocket', 'saku']);
-        const hotelVal = findVal(['hotel', 'penginapan']);
-        const laundryVal = findVal(['laundry']);
+        const groupedRincian = rincianList.reduce((acc: any, curr: any) => {
+                const k = curr.kategori || 'lain_lain';
+                if (!acc[k]) acc[k] = [];
+                acc[k].push(curr);
+                return acc;
+        }, {});
+
+        let dynamicDetailHtml = '';
+        let catIndex = 1;
+        for (const [kategori, items] of Object.entries(groupedRincian)) {
+                let itemsHtml = '';
+                (items as any[]).forEach(item => {
+                        const valStr = money(item.nilaiTotal, item.useDollar || isBteDollar);
+                        itemsHtml += `
+                        <tr style="font-size: 10px;">
+                                <td></td>
+                                <td></td>
+                                <td colspan="3" style="padding-left: 15px; font-weight: normal;">- ${esc(item.rincianLabel || '-')}</td>
+                                <td class="text-right" colspan="2">${valStr}</td>
+                        </tr>
+                        `;
+                });
+
+                dynamicDetailHtml += `
+                <tr style="font-size: 10px;">
+                        <td></td>
+                        <td style="padding-left: 20px; font-weight: bold;" width="5%">X.1.${catIndex}</td>
+                        <td colspan="3" style="font-weight: bold;">${formatKategoriName(kategori)}</td>
+                        <td colspan="2"></td>
+                </tr>
+                ${itemsHtml}
+                `;
+                catIndex++;
+        }
 
         // Calculate totals (with dollar formatting flag if applicable)
         const dpTotal = dpRow ? Number(isBteDollar ? (dpRow.totalUsd || 0) : (dpRow.totalIdr || 0)) : 0;
@@ -63,7 +95,7 @@ export function bteLuarNegeriPrintTemplate(data: any) {
                 body {
                         font-family: Arial, Helvetica, sans-serif;
                         font-size: 9.5px;
-                        line-height: 1.25;
+                        line-height: 1.6;
                         color: black;
                         margin: 0;
                 }
@@ -173,7 +205,7 @@ export function bteLuarNegeriPrintTemplate(data: any) {
                 }
                 .content-table td {
                         border: 1px solid black;
-                        padding: 3px 4px;
+                        padding: 6px 6px;
                         vertical-align: top;
                 }
                 .text-right {
@@ -333,24 +365,7 @@ export function bteLuarNegeriPrintTemplate(data: any) {
                         <td colspan="4">Expenditure</td>
                         <td colspan="2">Total Price</td>
                 </tr>
-                <tr style="font-size: 10px;">
-                        <td></td>
-                        <td style="padding-left: 20px;" width="5%">X.1.1</td>
-                        <td colspan="3">UANG SAKU HARIAN / POCKET MONEY</td>
-                        <td class="text-right" colspan="2">${money(pocketVal, isBteDollar)}</td>
-                </tr>
-                <tr style="font-size: 10px;">
-                        <td></td>
-                        <td style="padding-left: 20px;">X.1.2</td>
-                        <td colspan="3">HOTEL</td>
-                        <td class="text-right" colspan="2">${money(hotelVal, isBteDollar)}</td>
-                </tr>
-                <tr style="font-size: 10px;">
-                        <td></td>
-                        <td style="padding-left: 20px;">X.1.3</td>
-                        <td colspan="3">LAUNDRY</td>
-                        <td class="text-right" colspan="2">${money(laundryVal, isBteDollar)}</td>
-                </tr>
+                ${dynamicDetailHtml}
                 <tr class="bold" style="font-size: 10px;">
                         <td></td>
                         <td style="font-style: italic;" colspan="6">X.2 ETC</td>
@@ -383,7 +398,7 @@ export function bteLuarNegeriPrintTemplate(data: any) {
                                 ` : `
                                 <div style="height: 65px; border: 1px dashed #777; width: 65px; margin-bottom: 5px; display: flex; align-items: center; justify-content: center; color: #777; font-size: 9px; font-weight: 800;">QR</div>
                                 `}
-                                <p style="margin-top: 5px;"><strong>GA Administrator</strong></p>
+                                <p style="margin-top: 5px;"><strong>${esc(logs.find((l: any) => l.aksi === 'approve')?.actorNama || 'GA Administrator')}</strong></p>
                         </td>
                 </tr>
         </table>

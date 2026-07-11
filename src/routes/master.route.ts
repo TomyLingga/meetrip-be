@@ -2,7 +2,7 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../db/connection';
-import { refTransport, refRincianBiaya, refPagu, refRuangMeeting, configSistem } from '../db/schema';
+import { refTransport, refRincianBiaya, refPagu, refRuangMeeting, configSistem, refTipeRincian } from '../db/schema';
 import { eq, desc, asc } from 'drizzle-orm';
 import { ok } from '../utils/response';
 import { AppError } from '../utils/errorHandler';
@@ -26,9 +26,16 @@ const transportSchema = z.object({
 const rincianBiayaSchema = z.object({
   kode: z.string().min(1),
   label: z.string().min(1),
+  kategori: z.string().min(1).default('lain_lain'),
   hasPagu: z.boolean().default(true),
   perMalam: z.boolean().default(false),
   useDollarOverride: z.boolean().default(false),
+  isActive: z.boolean().default(true),
+});
+
+const tipeRincianSchema = z.object({
+  kode: z.string().min(1),
+  label: z.string().min(1),
   isActive: z.boolean().default(true),
 });
 
@@ -132,6 +139,43 @@ export default async function masterRoutes(fastify: FastifyInstance) {
     const { id } = req.params as { id: string };
     const data = rincianBiayaSchema.parse(req.body);
     const [updated] = await db.update(refRincianBiaya).set(data).where(eq(refRincianBiaya.id, id)).returning();
+    if (!updated) throw new AppError('Data tidak ditemukan', 404);
+    return ok(updated);
+  });
+
+  // ─── ref_tipe_rincian CRUD ─────────────────────────────────────────────────
+  fastify.get('/ref-tipe-rincian', { preHandler: [fastify.authenticate] }, async () => {
+    let rows = await db.select().from(refTipeRincian);
+    if (rows.length === 0) {
+      const defaults = [
+        { kode: 'SAKU', label: 'Uang Saku / Pocket Money' },
+        { kode: 'HOTEL', label: 'Hotel / Akomodasi' },
+        { kode: 'LAUNDRY', label: 'Laundry' },
+        { kode: 'TRANSPORT', label: 'Transportasi / Tiket' },
+        { kode: 'LAIN_LAIN', label: 'Lain-lain' },
+      ];
+      rows = await db.insert(refTipeRincian).values(defaults).returning();
+    }
+    return ok(rows);
+  });
+
+  fastify.post('/ref-tipe-rincian', { preHandler: [fastify.authenticateAdmin] }, async (req, reply) => {
+    const data = tipeRincianSchema.parse(req.body);
+    const [inserted] = await db.insert(refTipeRincian).values(data).returning();
+    return reply.status(201).send(ok(inserted));
+  });
+
+  fastify.put('/ref-tipe-rincian/:id', { preHandler: [fastify.authenticateAdmin] }, async (req) => {
+    const { id } = req.params as { id: string };
+    const data = tipeRincianSchema.parse(req.body);
+    const [updated] = await db.update(refTipeRincian).set(data).where(eq(refTipeRincian.id, id)).returning();
+    if (!updated) throw new AppError('Data tidak ditemukan', 404);
+    return ok(updated);
+  });
+
+  fastify.delete('/ref-tipe-rincian/:id', { preHandler: [fastify.authenticateAdmin] }, async (req) => {
+    const { id } = req.params as { id: string };
+    const [updated] = await db.update(refTipeRincian).set({ isActive: false }).where(eq(refTipeRincian.id, id)).returning();
     if (!updated) throw new AppError('Data tidak ditemukan', 404);
     return ok(updated);
   });

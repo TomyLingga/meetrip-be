@@ -9,6 +9,7 @@ import { AppError } from '../utils/errorHandler'
 export interface PaguResult {
   rincianId:   string
   rincianLabel: string
+  kategori:     string
   isUnlimited: boolean
   hasPagu:     boolean
   perMalam:    boolean
@@ -93,6 +94,7 @@ export async function kalkulasiPaguBto(params: {
       results.push({
         rincianId:    rincian.id,
         rincianLabel: rincian.label,
+        kategori:     rincian.kategori || 'lain_lain',
         isUnlimited:  true,
         hasPagu:      false,
         perMalam:     rincian.perMalam,
@@ -110,6 +112,7 @@ export async function kalkulasiPaguBto(params: {
       results.push({
         rincianId:    rincian.id,
         rincianLabel: rincian.label,
+        kategori:     rincian.kategori || 'lain_lain',
         isUnlimited:  true,
         hasPagu:      false,
         perMalam:     rincian.perMalam,
@@ -127,6 +130,7 @@ export async function kalkulasiPaguBto(params: {
     results.push({
       rincianId:    rincian.id,
       rincianLabel: rincian.label,
+      kategori:     rincian.kategori || 'lain_lain',
       isUnlimited:  pagu.isUnlimited,
       hasPagu:      true,
       perMalam:     rincian.perMalam,

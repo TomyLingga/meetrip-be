@@ -21,6 +21,7 @@ export const btoStatusEnum = pgEnum('bto_status', [
   'ACTIVE',            // SPDK approved, user siap berangkat
   'ATTENDED',          // user sudah attend stamp
   'REPORT_UPLOADED',   // laporan dinas sudah diupload
+  'BTE_DRAFT',         // user sedang menyusun realisasi BTE (belum dikirim ke admin)
   'ADMIN_BTE_REVIEW',  // BTE menunggu review admin
   'BTE_PAYMENT',       // BTE disetujui, menunggu pembayaran
   'COMPLETED',         // pembayaran BTE selesai

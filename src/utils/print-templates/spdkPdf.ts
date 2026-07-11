@@ -30,7 +30,7 @@ export function spdkPrintTemplate(
                 body {
                         font-family: Arial, Helvetica, sans-serif;
                         font-size: 11px;
-                        line-height: 1.25;
+                        line-height: 1.6;
                         color: black;
                         margin: 0;
                         padding-bottom: 30px;
@@ -143,7 +143,7 @@ export function spdkPrintTemplate(
                         margin-bottom: 10px;
                 }
                 .content-table td {
-                        padding: 1px 0;
+                        padding: 4px 0;
                 }
                 .sizing-row td {
                         height: 0 !important;
@@ -160,7 +160,7 @@ export function spdkPrintTemplate(
                         width: 100%;
                 }
                 .bullet-table td {
-                        padding: 2px 0;
+                        padding: 4px 0;
                 }
                 .footer-table {
                         width: 100%;
@@ -188,7 +188,7 @@ export function spdkPrintTemplate(
                         font-size: 11px;
                 }
                 .issued-table td {
-                        padding: 2px 0;
+                        padding: 4px 0;
                 }
                 .signature-area {
                         text-align: center;
@@ -292,40 +292,13 @@ export function spdkPrintTemplate(
 <body>
         <div class="no-print"><button onclick="window.print()">Cetak / Simpan PDF</button></div>
 
-        <table class="header-table">
-                <thead>
-                        <tr class="text-center">
-                                <td class="logo-cell" rowspan="4">
-                                        <img src="${LOGO_SRC}" alt="Logo INL" class="logo-img" width="83">
-                                </td>
-                                <td class="company-cell" rowspan="3">
-                                        <div class="company-title">PT. Industri Nabati Lestari</div>
-                                        <div class="company-subtitle">Pabrik Minyak Goreng</div>
-                                        <div class="company-address">
-                                                Komp. KEK Sei Mangkei, Kav. 2-3, Kec. Bosar Maligas, Kab. Simalungun, Sumatera Utara, 21184
-                                        </div>
-                                </td>
-                                <th class="meta-title-cell">No. Dokumen</th>
-                                <th class="meta-title-cell">Tgl. Berlaku</th>
-                        </tr>
-                        <tr class="text-center">
-                                <td class="meta-value-cell">INLHO/HRD-F/015</td>
-                                <td class="meta-value-cell">12-Nov-18</td>
-                        </tr>
-                        <tr class="text-center">
-                                <th class="meta-title-cell">No. Revisi</th>
-                                <th class="meta-title-cell">Halaman</th>
-                        </tr>
-                        <tr class="text-center">
-                                <th class="doc-title-cell">SURAT PERINTAH PERJALANAN DINAS KARYAWAN</th>
-                                <td class="meta-value-cell">00</td>
-                                <td class="meta-value-cell">1 dari 1</td>
-                        </tr>
-                </thead>
-        </table>
+        <div style="text-align: right; margin-bottom: 10px;">
+                <img src="${LOGO_SRC}" alt="Logo INL" style="height: 50px; object-fit: contain;">
+        </div>
 
-        <div style="text-align: center; margin-top: 14px; margin-bottom: 20px; font-weight: bold; font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #000; text-transform: uppercase;">
-                Nomor: ${esc(spdkRow.nomorSpdk)}
+        <div style="text-align: center; margin-top: 14px; margin-bottom: 20px;">
+                <div style="font-weight: bold; font-family: Arial, Helvetica, sans-serif; font-size: 16px; color: #000; text-decoration: underline; text-transform: uppercase;">SURAT PERINTAH PERJALANAN DINAS KARYAWAN</div>
+                <div style="font-weight: bold; font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #000; text-transform: uppercase; margin-top: 5px;">Nomor: ${esc(spdkRow.nomorSpdk)}</div>
         </div>
 
         <table class="content-table">
@@ -392,7 +365,7 @@ export function spdkPrintTemplate(
                         <td></td>
                         <td>9.</td>
                         <td>Kendaraan</td>
-                        <td>: ${esc(btoRow.transportLabel || '-')} -</td>
+                        <td>: ${esc(btoRow.transportLabel || '-')}</td>
                 </tr>
                 <tr>
                         <td></td>
@@ -453,8 +426,8 @@ export function spdkPrintTemplate(
                                 </table>
                                 <div class="signature-area">
                                         <div class="signature-box">${signatureMark}</div>
-                                        <div class="signature-name">${esc(spdkRow.approverKabagNama || 'Ferdiansyah')}</div>
-                                        <div>${esc(spdkRow.approverKabagPosition || 'Kabag SDM & Sistem')}</div>
+                                        <div class="signature-name">${esc(spdkRow.approverKabagNama ?? '-')}</div>
+                                        <div>${esc(spdkRow.approverKabagPosition ?? '-')}</div>
                                 </div>
                         </td>
                 </tr>

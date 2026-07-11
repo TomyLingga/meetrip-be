@@ -38,6 +38,81 @@ export function panjarPrintTemplate(
     return currentRoman;
   };
 
+  const rincianList = dpRow?.dpRincian || [];
+  
+  const formatKategoriName = (kat: string) => {
+    if (!kat || kat.toLowerCase() === 'lain_lain' || kat.toLowerCase() === 'lain-lain') {
+      return 'OTHERS / BIAYA LAIN';
+    }
+    return kat.toUpperCase();
+  };
+
+  const groupedRincian = rincianList.reduce((acc: any, curr: any) => {
+    const k = curr.kategori || 'lain_lain';
+    if (!acc[k]) acc[k] = [];
+    acc[k].push(curr);
+    return acc;
+  }, {});
+
+  const formatCatVal = (val: { idr: number, usd: number }) => {
+    const parts = [];
+    if (val.usd > 0) parts.push(money(val.usd, true));
+    if (val.idr > 0 || parts.length === 0) parts.push(money(val.idr, false));
+    return parts.join(' + ');
+  };
+
+  const getDynamicDetailHtml = (romanNumber: string) => {
+    let html = '';
+    let catIndex = 1;
+    for (const [kategori, items] of Object.entries(groupedRincian)) {
+      let itemsHtml = '';
+      let catTotalIdr = 0;
+      let catTotalUsd = 0;
+
+      let itemIndex = 1;
+      (items as any[]).forEach(item => {
+        const valUsd = item.useDollar ? Number(item.nilaiTotal) || 0 : 0;
+        const valIdr = !item.useDollar ? Number(item.nilaiTotal) || 0 : 0;
+        
+        catTotalUsd += valUsd;
+        catTotalIdr += valIdr;
+
+        const parts = [];
+        if (valUsd > 0) parts.push(money(valUsd, true));
+        if (valIdr > 0 || parts.length === 0) parts.push(money(valIdr, false));
+        const valStr = parts.join(' + ');
+
+        itemsHtml += `
+          <tr>
+            <td></td>
+            <td></td>
+            <td class="subno" style="font-weight: normal; padding-left: 5px;">${romanNumber}.${catIndex}.${itemIndex}</td>
+            <td class="label" style="font-weight: normal;">${esc(item.rincianLabel || '-')}</td>
+            <td>: &nbsp; ${valStr}</td>
+          </tr>
+        `;
+        itemIndex++;
+      });
+
+      const catParts = [];
+      if (catTotalUsd > 0) catParts.push(money(catTotalUsd, true));
+      if (catTotalIdr > 0 || catParts.length === 0) catParts.push(money(catTotalIdr, false));
+      const catTotalStr = catParts.join(' + ');
+
+      html += `
+        <tr>
+          <td></td>
+          <td class="subno" style="font-weight: bold;">${romanNumber}.${catIndex}</td>
+          <td class="label" style="font-weight: bold;" colspan="2">${formatKategoriName(kategori)}</td>
+          <td style="font-weight: bold;">: &nbsp; ${catTotalStr}</td>
+        </tr>
+        ${itemsHtml}
+      `;
+      catIndex++;
+    }
+    return html;
+  };
+
   return `
 <!DOCTYPE html>
 <html>
@@ -50,7 +125,7 @@ export function panjarPrintTemplate(
                 body {
                         font-family: Arial, Helvetica, sans-serif;
                         font-size: 11px;
-                        line-height: 1.2;
+                        line-height: 1.6;
                         color: #20242a;
                         margin: 0;
                         padding-bottom: 30px;
@@ -171,7 +246,7 @@ export function panjarPrintTemplate(
                 }
                 .content-table td {
                         border: 1px solid #20242a;
-                        padding: 3px 4px;
+                        padding: 6px 6px;
                         vertical-align: middle;
                 }
                 .sizing-row td {
@@ -290,94 +365,106 @@ export function panjarPrintTemplate(
                 <table class="content-table">
                         <colgroup>
                                 <col style="width: 5%;">
-                                <col style="width: 10%;">
+                                <col style="width: 5%;">
+                                <col style="width: 5%;">
                                 <col style="width: 30%;">
                                 <col style="width: 55%;">
                         </colgroup>
-                        <tr class="sizing-row"><td></td><td></td><td></td><td></td></tr>
+                        <tr class="sizing-row"><td></td><td></td><td></td><td></td><td></td></tr>
                         <tr>
                                 <td class="roman">${nextRoman()}</td>
-                                <td class="label" colspan="2">SPJ/BTO NUMBER</td>
+                                <td class="label" colspan="3">SPJ/BTO NUMBER</td>
                                 <td class="value">: &nbsp; ${esc(btoRow.nomorBto || 'SURAT BELUM DITERBITKAN')}</td>
                         </tr>
                         <tr>
                                 <td class="roman">${nextRoman()}</td>
-                                <td class="label" colspan="2">NAME</td>
+                                <td class="label" colspan="3">NAME</td>
                                 <td>: &nbsp; ${esc((btoRow.employeeNama || owner?.nama || '').toUpperCase())}</td>
                         </tr>
                         <tr>
                                 <td class="roman">${nextRoman()}</td>
-                                <td class="label" colspan="2">POSITION</td>
+                                <td class="label" colspan="3">POSITION</td>
                                 <td>: &nbsp; ${esc((owner?.jabatan || '').toUpperCase())}</td>
                         </tr>
                         <tr>
                                 <td class="roman">${nextRoman()}</td>
-                                <td class="label" colspan="2">JOB LEVEL</td>
+                                <td class="label" colspan="3">JOB LEVEL</td>
                                 <td>: &nbsp; ${jobLevelName(owner?.gradeLevel)}</td>
                         </tr>
                         <tr>
                                 <td class="roman">${nextRoman()}</td>
-                                <td class="label" colspan="2">DESTINATION</td>
+                                <td class="label" colspan="3">DESTINATION</td>
                                 <td>: &nbsp; ${esc(btoRow.tujuanNama).toUpperCase()}</td>
                         </tr>
                         <tr>
                                 <td class="roman">${nextRoman()}</td>
-                                <td class="label" colspan="2">NECESSARY</td>
+                                <td class="label" colspan="3">NECESSARY</td>
                                 <td>: &nbsp; ${esc(btoRow.kepentingan).toUpperCase()}</td>
                         </tr>
                         <tr>
                                 <td class="roman">${nextRoman()}</td>
-                                <td class="label" colspan="2">TOTAL DAYS</td>
+                                <td class="label" colspan="3">TOTAL DAYS</td>
                                 <td>: &nbsp; ${durationDays(btoRow.estBerangkat, btoRow.estKembali)} HARI</td>
                         </tr>
                         <tr>
                                 <td class="roman">${nextRoman()}</td>
-                                <td class="label" colspan="3">PERIODE</td>
+                                <td class="label" colspan="4">PERIODE</td>
                         </tr>
                         <tr>
                                 <td></td>
-                                <td class="subno">${currentRoman}.1</td>
+                                <td class="subno" colspan="2">${currentRoman}.1</td>
                                 <td class="label">START</td>
                                 <td>: &nbsp; ${dateText(btoRow.estBerangkat).toUpperCase()}</td>
                         </tr>
                         <tr>
                                 <td></td>
-                                <td class="subno">${currentRoman}.2</td>
+                                <td class="subno" colspan="2">${currentRoman}.2</td>
                                 <td class="label">END</td>
                                 <td>: &nbsp; ${dateText(btoRow.estKembali).toUpperCase()}</td>
                         </tr>
                         <tr>
                                 <td class="roman">${nextRoman()}</td>
-                                <td class="label" colspan="3">DESCRIPTION OF SCHEDULE</td>
+                                <td class="label" colspan="4">DESCRIPTION OF SCHEDULE</td>
                         </tr>
                         <tr>
                                 <td></td>
-                                <td class="subno">${currentRoman}.1</td>
+                                <td class="subno" colspan="2">${currentRoman}.1</td>
                                 <td class="label">DEPARTURE DATE</td>
                                 <td>: &nbsp; ${dateText(btoRow.estBerangkat).toUpperCase()}</td>
                         </tr>
                         <tr>
                                 <td></td>
-                                <td class="subno">${currentRoman}.2</td>
+                                <td class="subno" colspan="2">${currentRoman}.2</td>
                                 <td class="label">DEPARTURE TIME</td>
                                 <td>: &nbsp; ${departureTime}</td>
                         </tr>
                         <tr>
                                 <td></td>
-                                <td class="subno">${currentRoman}.3</td>
+                                <td class="subno" colspan="2">${currentRoman}.3</td>
                                 <td class="label">ARRIVAL DATE</td>
                                 <td>: &nbsp; ${dateText(btoRow.estKembali).toUpperCase()}</td>
                         </tr>
                         <tr>
                                 <td></td>
-                                <td class="subno">${currentRoman}.4</td>
+                                <td class="subno" colspan="2">${currentRoman}.4</td>
                                 <td class="label">ARRIVAL TIME</td>
                                 <td>: &nbsp; ${arrivalTime}</td>
+                        </tr>
+                        <tr>
+                                <td class="roman">${nextRoman()}</td>
+                                <td class="label" colspan="3" style="font-weight: bold;">DETAIL OF DOWN PAYMENT (DP)</td>
+                                <td></td>
+                        </tr>
+                        ${getDynamicDetailHtml(currentRoman)}
+                        <tr class="bold">
+                                <td></td>
+                                <td class="label" colspan="3" style="text-align: right; padding-right: 15px;">TOTAL DOWN PAYMENT</td>
+                                <td>: &nbsp; ${dpRow ? formatCatVal({ idr: Number(dpRow.totalIdr || 0), usd: Number(dpRow.totalUsd || 0) }) : '-'}</td>
                         </tr>
                 </table>
 
                 <div class="personalia-qr-wrap">${financeQrMark}</div>
-                <div class="sign-row">Sign by Personalia: &nbsp;<strong><em>GA Administrator</em></strong></div>
+                <div class="sign-row">Sign by Personalia: &nbsp;<strong><em>${esc(logs.find(l => l.aksi === 'approve')?.actorNama || 'GA Administrator')}</em></strong></div>
         </div>
 
         <div class="address-footer">

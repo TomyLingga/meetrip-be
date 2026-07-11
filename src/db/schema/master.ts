@@ -24,6 +24,7 @@ export const refRincianBiaya = pgTable('ref_rincian_biaya', {
   id:                uuid('id').primaryKey().$defaultFn(genUUID),
   kode:              varchar('kode',  { length: 30  }).notNull().unique(),
   label:             varchar('label', { length: 150 }).notNull(),
+  kategori:          varchar('kategori', { length: 50 }).notNull().default('lain_lain'),
   hasPagu:           boolean('has_pagu').notNull().default(true),
   perMalam:          boolean('per_malam').notNull().default(false), // Hotel: per malam bukan per hari
   useDollarOverride: boolean('use_dollar_override').notNull().default(false),
@@ -63,4 +64,13 @@ export const configSistem = pgTable('config_sistem', {
   nilai: text('nilai').notNull(),
   label: varchar('label', { length: 200 }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+})
+
+// ─── ref_tipe_rincian ─────────────────────────────────────────────────────────
+// Kategori / tipe rincian biaya (Uang Saku, Hotel, Laundry, Transportasi, dll)
+export const refTipeRincian = pgTable('ref_tipe_rincian', {
+  id:       uuid('id').primaryKey().$defaultFn(genUUID),
+  kode:     varchar('kode',  { length: 30  }).notNull().unique(),
+  label:    varchar('label', { length: 150 }).notNull(),
+  isActive: boolean('is_active').notNull().default(true),
 })

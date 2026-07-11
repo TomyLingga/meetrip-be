@@ -31,19 +31,52 @@ export function btePrintTemplate(
     }
   };
 
-  const findVal = (keywords: string[], excludeKeywords: string[] = []) => {
-    const item = (bteRow?.bteRincian || []).find((r: any) => {
-      const lbl = (r.rincianLabel || '').toLowerCase();
-      const matches = keywords.some(k => lbl.includes(k));
-      const excluded = excludeKeywords.some(k => lbl.includes(k));
-      return matches && !excluded;
-    });
-    return item ? Number(item.nilaiTotal) || 0 : 0;
+  const rincianList = bteRow?.bteRincian || [];
+  const formatKategoriName = (kat: string) => {
+    switch (kat) {
+      case 'saku': return 'POCKET MONEY / UANG SAKU';
+      case 'hotel': return 'HOTEL / ACCOMMODATION';
+      case 'laundry': return 'LAUNDRY';
+      case 'transport': return 'TRANSPORTATION / TICKET';
+      case 'lain_lain': return 'OTHERS / BIAYA LAIN';
+      default: return kat.toUpperCase();
+    }
   };
 
-  const pocketVal = findVal(['pocket', 'saku']);
-  const hotelVal = findVal(['hotel', 'penginapan']);
-  const laundryVal = findVal(['laundry']);
+  const groupedRincian = rincianList.reduce((acc: any, curr: any) => {
+    const k = curr.kategori || 'lain_lain';
+    if (!acc[k]) acc[k] = [];
+    acc[k].push(curr);
+    return acc;
+  }, {});
+
+  let dynamicDetailHtml = '';
+  let catIndex = 1;
+  for (const [kategori, items] of Object.entries(groupedRincian)) {
+    let itemsHtml = '';
+    (items as any[]).forEach(item => {
+      const valStr = money(item.nilaiTotal, item.useDollar);
+      itemsHtml += `
+        <tr>
+          <td></td>
+          <td></td>
+          <td style="padding-left: 15px; font-weight: normal;">- ${esc(item.rincianLabel || '-')}</td>
+          <td class="money-cell" colspan="2">${valStr}</td>
+        </tr>
+      `;
+    });
+
+    dynamicDetailHtml += `
+      <tr>
+        <td></td>
+        <td class="subno" style="font-weight: bold;">X.1.${catIndex}</td>
+        <td style="font-weight: bold;">${formatKategoriName(kategori)}</td>
+        <td colspan="2"></td>
+      </tr>
+      ${itemsHtml}
+    `;
+    catIndex++;
+  }
 
   const dpTotal = dpRow ? Number(dpRow.totalIdr || 0) : 0;
   const bteTotal = Number(bteRow?.totalIdr || 0);
@@ -69,7 +102,7 @@ export function btePrintTemplate(
                 body {
                         font-family: Arial, Helvetica, sans-serif;
                         font-size: 9.5px;
-                        line-height: 1.15;
+                        line-height: 1.6;
                         color: #20242a;
                         margin: 0;
                         padding-bottom: 30px;
@@ -190,7 +223,7 @@ export function btePrintTemplate(
                 }
                 .content-table td {
                         border: 1px solid #20242a;
-                        padding: 2px 3px;
+                        padding: 4px 6px;
                         vertical-align: middle;
                 }
                 .sizing-row td {
@@ -423,24 +456,7 @@ export function btePrintTemplate(
                                 <td class="expense">Expenditure</td>
                                 <td class="amount" colspan="2">Total Price</td>
                         </tr>
-                        <tr>
-                                <td></td>
-                                <td class="subno">X.1.1</td>
-                                <td>UANG SAKU HARIAN / POCKET MONEY</td>
-                                <td class="money-cell" colspan="2">${money(pocketVal)}</td>
-                        </tr>
-                        <tr>
-                                <td></td>
-                                <td class="subno">X.1.2</td>
-                                <td>HOTEL</td>
-                                <td class="money-cell" colspan="2">${money(hotelVal)}</td>
-                        </tr>
-                        <tr>
-                                <td></td>
-                                <td class="subno">X.1.3</td>
-                                <td>LAUNDRY</td>
-                                <td class="money-cell" colspan="2">${money(laundryVal)}</td>
-                        </tr>
+                        ${dynamicDetailHtml}
                         <tr>
                                 <td></td>
                                 <td class="subno section-label">X.2</td>
@@ -462,7 +478,7 @@ export function btePrintTemplate(
                 </table>
 
                 <div class="personalia-qr-wrap">${adminQrMark}</div>
-                <div class="sign-row">Sign by Personalia: &nbsp;<strong><em>GA Administrator</em></strong></div>
+                <div class="sign-row">Sign by Personalia: &nbsp;<strong><em>${esc(logs.find(l => l.aksi === 'approve')?.actorNama || 'GA Administrator')}</em></strong></div>
         </div>
 
         <div class="address-footer">

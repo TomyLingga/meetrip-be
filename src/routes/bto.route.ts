@@ -7,7 +7,7 @@ import {
   listBtoService, listBtoApprovalsService, listBtoApprovalsHistoryService,
 } from '../services/bto.service'
 import { kalkulasiPaguBto, getGradeIdByLevel } from '../services/pagu.service'
-import { reverseGeocode, getWilayahTipe, haversineKm } from '../services/geocoding.service'
+import { reverseGeocode, getWilayahTipe, haversineKm, resolveEmployeePenempatan } from '../services/geocoding.service'
 import { db } from '../db/connection'
 import { attendStamp, bte, bteApprovalLog, bto, btoApprovalLog, configPemberiTugas, localUserCache, spdk, spdkApprovalLog } from '../db/schema'
 import { eq, and, or, inArray, desc } from 'drizzle-orm'
@@ -115,9 +115,9 @@ async function buildBtoApprovalTimeline(id: string) {
   if (bteRow && !logs.some((log) => log.tahap === 'bte' || log.tahap === 'bte_payment')) {
     const bteLogs = await db.select().from(bteApprovalLog).where(eq(bteApprovalLog.bteId, bteRow.id))
     const statusByAction: Record<string, { dari: string; ke: string; tahap: string }> = {
-      submit: { dari: 'REPORT_UPLOADED', ke: 'ADMIN_BTE_REVIEW', tahap: 'bte' },
+      submit: { dari: 'BTE_DRAFT', ke: 'ADMIN_BTE_REVIEW', tahap: 'bte' },
       approve: { dari: 'ADMIN_BTE_REVIEW', ke: 'BTE_PAYMENT', tahap: 'bte' },
-      revision: { dari: 'ADMIN_BTE_REVIEW', ke: 'REPORT_UPLOADED', tahap: 'bte' },
+      revision: { dari: 'ADMIN_BTE_REVIEW', ke: 'REVISION_BTE', tahap: 'bte' },
       reject: { dari: 'ADMIN_BTE_REVIEW', ke: 'REJECTED', tahap: 'bte' },
       mark_paid: { dari: 'BTE_PAYMENT', ke: 'COMPLETED', tahap: 'bte_payment' },
     }
@@ -162,7 +162,13 @@ export default async function btoRoutes(fastify: FastifyInstance) {
   /** GET /api/bto — List BTO */
   fastify.get('/', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const q = req.query as any
-    const isAdmin = (req.user.role ?? '').split(',').some(r => ['super_admin', 'admin'].includes(r))
+    const roles = (req.user.role ?? '').split(',')
+    const userCache = await db.query.localUserCache.findFirst({
+      where: eq(localUserCache.portalUserId, req.user.sub),
+    })
+    const isBom1 = userCache?.gradeKode === 'BOM-1'
+    const isAdmin = roles.some(r => ['super_admin', 'admin', 'sdm'].includes(r)) || isBom1
+
     const result = await listBtoService({
       employeeId: isAdmin ? q.employeeId : req.user.sub,
       viewerRole: req.user.role,
@@ -197,6 +203,38 @@ export default async function btoRoutes(fastify: FastifyInstance) {
       role: req.user.role ?? 'user'
     })
     return reply.send(ok(result))
+  })
+
+  /** GET /api/bto/calculate-geo — Calculate distance & region type based on target coordinates and user's OFFICIAL penempatan (bukan lokasi real-time) */
+  fastify.get('/calculate-geo', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const q = req.query as { lat: string; lng: string }
+    const lat = Number(q.lat)
+    const lng = Number(q.lng)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      throw new AppError('Koordinat tidak valid', 400)
+    }
+
+    // Ambil lokasi penempatan RESMI user (selalu di-refresh dari Portal), acuan utama perhitungan wilayah
+    const { lat: pLat, lng: pLng, provinsi: pProv, nama: penempatanNama } = await resolveEmployeePenempatan(req.user.sub)
+
+    // Reverse geocode target coordinate
+    const geo = await reverseGeocode(lat, lng)
+
+    let jarakKm = 0
+    if (pLat != null && pLng != null) {
+      jarakKm = haversineKm(pLat, pLng, lat, lng)
+    }
+
+    const wilayahTipe = getWilayahTipe(pProv, geo.provinsi, geo.negara)
+
+    return reply.send(ok({
+      jarakKm: Number(jarakKm.toFixed(2)),
+      wilayahTipe,
+      alamat: geo.alamat || '',
+      provinsi: geo.provinsi || '',
+      negara: geo.negara || '',
+      penempatanNama: penempatanNama || '',
+    }))
   })
 
   /** GET /api/bto/:id — Detail BTO */
@@ -297,7 +335,7 @@ export default async function btoRoutes(fastify: FastifyInstance) {
     if (!isAdmin && row.employeeId !== req.user.sub) {
       throw new AppError('Tidak diizinkan mengupload laporan BTO ini', 403)
     }
-    if (row.status !== 'ATTENDED' && row.status !== 'REPORT_UPLOADED') {
+    if (row.status !== 'ATTENDED' && row.status !== 'REPORT_UPLOADED' && row.status !== 'BTE_DRAFT') {
       throw new AppError('Laporan hanya bisa diupload setelah attend stamp berhasil', 400)
     }
 
@@ -324,10 +362,12 @@ export default async function btoRoutes(fastify: FastifyInstance) {
     })
 
     const filePath = `bto/${id}/${filename}`
+    // Jika sebelumnya sudah masuk tahap BTE_DRAFT, jangan mundurkan statusnya ke REPORT_UPLOADED
+    const nextStatus = row.status === 'BTE_DRAFT' ? 'BTE_DRAFT' : 'REPORT_UPLOADED'
     await db.update(bto).set({
       laporanPath: filePath,
       laporanNama: data.filename,
-      status: 'REPORT_UPLOADED',
+      status: nextStatus,
       updatedAt: new Date(),
     }).where(eq(bto.id, id))
 
@@ -338,11 +378,11 @@ export default async function btoRoutes(fastify: FastifyInstance) {
       actorId: req.user.sub,
       actorNama: req.user.nama ?? row.employeeNama ?? 'Karyawan',
       statusDari: row.status,
-      statusKe: 'REPORT_UPLOADED',
+      statusKe: nextStatus,
       catatan: `Laporan perjalanan diupload: ${data.filename}`,
     })
 
-    return reply.send(ok({ path: filePath, nama: data.filename, status: 'REPORT_UPLOADED' }))
+    return reply.send(ok({ path: filePath, nama: data.filename, status: nextStatus }))
   })
 
   /** POST /api/bto/:id/submit */
@@ -364,7 +404,11 @@ export default async function btoRoutes(fastify: FastifyInstance) {
   fastify.post('/:id/approve-pt', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { id } = req.params as { id: string }
     const { aksi, catatan } = z.object({ aksi: z.enum(['approve', 'reject']), catatan: z.string().optional() }).parse(req.body)
-    const result = await ptApproveService(id, aksi, { id: req.user.sub, nama: req.user.nama ?? '' }, catatan)
+    const result = await ptApproveService(id, aksi, {
+      id: req.user.sub,
+      employeeId: req.user.employeeId,
+      nama: req.user.nama ?? '',
+    }, catatan)
     return reply.send(ok(result))
   })
 
@@ -517,66 +561,26 @@ export default async function btoRoutes(fastify: FastifyInstance) {
     let wilayah = wilayahTipe
     let jarakKm: number | null = null
 
-    if (!wilayah) {
-      // Geocode tujuan → wilayah_tipe
+    // Ambil lokasi penempatan RESMI user (selalu di-refresh dari Portal), acuan utama perhitungan wilayah & jarak
+    const { lat: penempatanLat, lng: penempatanLng, provinsi: userProvinsi } = await resolveEmployeePenempatan(req.user.sub)
+
+    if (tujuanLat != null && tujuanLng != null && Number.isFinite(Number(tujuanLat)) && Number.isFinite(Number(tujuanLng))) {
+      // Lokasi tujuan adalah sumber kebenaran. Jangan gunakan nilai wilayah dari
+      // form karena nilai preview lama bisa berasal dari geocoding yang gagal.
       const geo = await reverseGeocode(Number(tujuanLat || 0), Number(tujuanLng || 0)).catch(() => ({ provinsi: null, negara: 'Indonesia', alamat: '' }))
-
-      let penempatanLat = userCache?.penempatanLat ?? null
-      let penempatanLng = userCache?.penempatanLng ?? null
-
-      if (userCache?.employeeId) {
-        try {
-          const portalRes = await fetch(`${config.portal.apiUrl}/api/sso/employees?id=${userCache.employeeId}`, {
-            headers: { 'x-internal': config.portal.internalToken },
-          })
-          if (portalRes.ok) {
-            const body = await portalRes.json() as { data: any[] }
-            const rows = body.data ?? []
-            if (rows.length > 0) {
-              const empData = rows[0]
-              if (empData.penempatanLat && empData.penempatanLng) {
-                penempatanLat = empData.penempatanLat
-                penempatanLng = empData.penempatanLng
-              }
-            }
-          }
-        } catch (err) {
-          console.error('Gagal mengambil data koordinat penempatan dari Portal:', err)
-        }
-      }
-
-      let userProvinsi: string | null = null
-      if (penempatanLat && penempatanLng) {
-        try {
-          const userGeo = await reverseGeocode(Number(penempatanLat), Number(penempatanLng))
-          userProvinsi = userGeo.provinsi
-        } catch (err) {
-          console.error('Failed to geocode user penempatan:', err)
-        }
-      }
 
       wilayah = getWilayahTipe(
         userProvinsi,
         geo.provinsi,
         geo.negara,
       )
+    }
 
-      if (penempatanLat && penempatanLng && tujuanLat && tujuanLng) {
-        jarakKm = haversineKm(
-          Number(penempatanLat), Number(penempatanLng),
-          Number(tujuanLat), Number(tujuanLng),
-        )
-      }
-    } else {
-      // compute distance only if coordinates are supplied
-      let penempatanLat = userCache?.penempatanLat ?? null
-      let penempatanLng = userCache?.penempatanLng ?? null
-      if (penempatanLat && penempatanLng && tujuanLat && tujuanLng) {
-        jarakKm = haversineKm(
-          Number(penempatanLat), Number(penempatanLng),
-          Number(tujuanLat), Number(tujuanLng),
-        )
-      }
+    if (penempatanLat != null && penempatanLng != null && tujuanLat && tujuanLng) {
+      jarakKm = haversineKm(
+        penempatanLat, penempatanLng,
+        Number(tujuanLat), Number(tujuanLng),
+      )
     }
 
     const start = new Date(estBerangkat)

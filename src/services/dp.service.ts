@@ -27,6 +27,7 @@ export async function createOrUpdateDpService(
     rincian: Array<{
       rincianId: string;
       rincianLabel?: string;
+      kategori?: string;
       jumlahHari: number;
       nilaiPerHari: number;
       nilaiTotal: number;
@@ -112,6 +113,7 @@ export async function createOrUpdateDpService(
         dpId: dpRow!.id,
         rincianId: r.rincianId,
         rincianLabel: r.rincianLabel,
+        kategori: r.kategori || 'lain_lain',
         jumlahHari: r.jumlahHari,
         nilaiPerHari: String(r.nilaiPerHari),
         nilaiTotal: String(r.nilaiTotal),

@@ -5,6 +5,7 @@ import { localUserCache, refreshToken, meetripUserRole } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import { config } from '../config/env'
 import { AppError } from '../utils/errorHandler'
+import { reverseGeocode } from './geocoding.service'
 import crypto from 'crypto'
 import type { FastifyInstance } from 'fastify'
 import type { JwtPayload } from '../plugins/auth'
@@ -78,6 +79,22 @@ export async function loginSsoService(
 
   // 2. Upsert local_user_cache
   const emp = portalUser.employee
+  // Wilayah (provinsi) dari lokasi penempatan RESMI karyawan langsung di-geocode saat
+  // login, supaya acuan perhitungan wilayah dinas selalu berdasarkan tempat penempatan
+  // yang benar — tidak menunggu proses lain untuk mengisinya.
+  let penempatanProvinsi: string | null = null
+  if (emp?.penempatanArea?.latitude && emp?.penempatanArea?.longitude) {
+    try {
+      const penempatanGeo = await reverseGeocode(
+        Number(emp.penempatanArea.latitude),
+        Number(emp.penempatanArea.longitude),
+      )
+      penempatanProvinsi = penempatanGeo.provinsi
+    } catch (err) {
+      console.error('Gagal geocode lokasi penempatan saat login:', err)
+    }
+  }
+
   const cacheData = {
     portalUserId: portalUser.id,
     email: portalUser.email,
@@ -92,7 +109,7 @@ export async function loginSsoService(
     penempatanNama: emp?.penempatanArea?.nama ?? null,
     penempatanLat: emp?.penempatanArea?.latitude ?? null,
     penempatanLng: emp?.penempatanArea?.longitude ?? null,
-    penempatanProvinsi: null as string | null, // diisi saat geocode (lazy)
+    penempatanProvinsi,
     lastSync: new Date(),
   }
 

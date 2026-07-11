@@ -53,6 +53,7 @@ export const bteRincian = pgTable('bte_rincian', {
   bteId:         uuid('bte_id').notNull().references(() => bte.id, { onDelete: 'cascade' }),
   rincianId:     uuid('rincian_id').notNull().references(() => refRincianBiaya.id),
   rincianLabel:  varchar('rincian_label', { length: 150 }),
+  kategori:      varchar('kategori', { length: 50 }).notNull().default('lain_lain'),
   jumlahHari:    integer('jumlah_hari').notNull().default(1),
   nilaiPerHari:  numeric('nilai_per_hari', { precision: 15, scale: 2 }).notNull().default('0'),
   nilaiTotal:    numeric('nilai_total',    { precision: 18, scale: 2 }).notNull().default('0'),
