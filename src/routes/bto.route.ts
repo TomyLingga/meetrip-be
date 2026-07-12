@@ -147,6 +147,27 @@ async function buildBtoApprovalTimeline(id: string) {
 
 export default async function btoRoutes(fastify: FastifyInstance) {
 
+  /** GET /api/bto/my-penempatan — Mengecek lokasi penempatan user saat ini */
+  fastify.get('/my-penempatan', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    try {
+      const penempatan = await resolveEmployeePenempatan(req.user.sub)
+      return reply.send(ok({
+        hasPenempatan: penempatan.lat != null && penempatan.lng != null,
+        penempatanNama: penempatan.nama || null,
+        lat: penempatan.lat || null,
+        lng: penempatan.lng || null
+      }))
+    } catch (err) {
+      req.log.error(err)
+      return reply.send(ok({
+        hasPenempatan: false,
+        penempatanNama: null,
+        lat: null,
+        lng: null
+      }))
+    }
+  })
+
   /** POST /api/bto — Buat BTO baru (DRAFT) */
   fastify.post('/', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const data = btoCreateSchema.parse(req.body)
