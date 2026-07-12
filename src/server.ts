@@ -53,6 +53,7 @@ async function bootstrap() {
         cb(null, true);
         return;
       }
+      console.error(`[CORS REJECTED] Origin tidak diizinkan: "${origin}". Allowed origins:`, Array.from(allowedOrigins));
       cb(new Error('Origin tidak diizinkan'), false);
     },
     credentials: true,
