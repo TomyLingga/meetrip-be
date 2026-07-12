@@ -293,7 +293,7 @@ export function spdkPrintTemplate(
         <div class="no-print"><button onclick="window.print()">Cetak / Simpan PDF</button></div>
 
         <div style="text-align: right; margin-bottom: 10px;">
-                <img src="${LOGO_SRC}" alt="Logo INL" style="height: 50px; object-fit: contain;">
+                <img src="${LOGO_SRC}" alt="Logo INL" style="height: 64px; object-fit: contain; background: transparent; margin-top: 4px; margin-right: 6px;">
         </div>
 
         <div style="text-align: center; margin-top: 14px; margin-bottom: 20px;">

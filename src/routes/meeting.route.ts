@@ -15,23 +15,29 @@ import { AppError } from '../utils/errorHandler';
 import { config } from '../config/env';
 
 const meetingCreateSchema = z.object({
-  topik: z.string().min(1),
+  topik: z.string().min(1).max(500),
   mulai: z.string().datetime(),
   selesai: z.string().datetime(),
   ruangId: z.preprocess((value) => value === '' ? undefined : value, z.string().uuid().optional()),
-  ruangNama: z.preprocess((value) => value === '' ? undefined : value, z.string().optional()),
+  ruangNama: z.preprocess((value) => value === '' ? undefined : value, z.string().max(100).optional()),
   needSoundSystem: z.boolean().default(false),
   needZoom: z.boolean().default(false),
-  zoomLink: z.preprocess((value) => value === '' ? undefined : value, z.string().optional()),
-  catatan: z.string().optional(),
+  zoomLink: z.preprocess((value) => value === '' ? undefined : value, z.string().max(500).optional()),
+  catatan: z.string().max(2000).optional(),
   partisipan: z.array(
     z.object({
-      nama: z.string().min(1),
-      email: z.preprocess((value) => value === '' ? undefined : value, z.string().email().optional()),
-      jabatan: z.string().optional(),
+      nama: z.string().min(1).max(200),
+      email: z.preprocess((value) => value === '' ? undefined : value, z.string().email().max(200).optional()),
+      jabatan: z.string().max(200).optional(),
       isExternal: z.boolean().default(false),
     })
-  ),
+  ).max(100),
+});
+
+const meetingListQuerySchema = z.object({
+  dateFrom: z.string().datetime().optional(),
+  dateTo: z.string().datetime().optional(),
+  ruangId: z.preprocess((v) => (v === '' ? undefined : v), z.string().uuid().optional()),
 });
 
 export default async function meetingRoutes(fastify: FastifyInstance) {
@@ -47,7 +53,7 @@ export default async function meetingRoutes(fastify: FastifyInstance) {
   });
 
   fastify.get('/', { preHandler: [fastify.authenticate] }, async (req, reply) => {
-    const q = req.query as any;
+    const q = meetingListQuerySchema.parse(req.query);
     const result = await listMeetingService({
       dateFrom: q.dateFrom ? new Date(q.dateFrom) : undefined,
       dateTo: q.dateTo ? new Date(q.dateTo) : undefined,
@@ -82,7 +88,7 @@ export default async function meetingRoutes(fastify: FastifyInstance) {
   });
 
   fastify.get('/public', async (req, reply) => {
-    const q = req.query as any;
+    const q = meetingListQuerySchema.parse(req.query);
     const result = await listMeetingService({
       dateFrom: q.dateFrom ? new Date(q.dateFrom) : undefined,
       dateTo: q.dateTo ? new Date(q.dateTo) : undefined,
@@ -117,10 +123,12 @@ export default async function meetingRoutes(fastify: FastifyInstance) {
   });
 
   fastify.get('/check-ruang', { preHandler: [fastify.authenticate] }, async (req, reply) => {
-    const q = req.query as any;
-    if (!q.ruangId || !q.mulai || !q.selesai) {
-      throw new AppError('ruangId, mulai, dan selesai wajib diisi', 400);
-    }
+    const q = z.object({
+      ruangId: z.string().uuid(),
+      mulai: z.string().datetime(),
+      selesai: z.string().datetime(),
+      excludeMeetingId: z.preprocess((v) => (v === '' ? undefined : v), z.string().uuid().optional()),
+    }).parse(req.query);
     const conflict = await checkRuangConflict(
       q.ruangId,
       new Date(q.mulai),

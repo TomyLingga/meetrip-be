@@ -2,7 +2,7 @@
 // Kalkulasi pagu berdasarkan rincian + grade + wilayah_tipe + tanggal + jumlah hari
 import { db }   from '../db/connection'
 import { refPagu, refRincianBiaya } from '../db/schema'
-import { eq, and, or, isNull, lte, gte } from 'drizzle-orm'
+import { eq, and, or, isNull, lte, gte, sql } from 'drizzle-orm'
 import { config as appConfig } from '../config/env'
 import { AppError } from '../utils/errorHandler'
 
@@ -27,10 +27,28 @@ export interface RincianPaguInput {
   useDollar: boolean
 }
 
+// Extract the calendar Y/M/D of a Date as seen in Asia/Jakarta (WIB), independent
+// of the server's local timezone. Render/production containers run in UTC, so using
+// getFullYear/getMonth/getDate directly would shift trip dates by a day and corrupt
+// the per-diem (pagu) day/night counts. The PDF layer already standardizes on WIB.
+function jakartaYmd(date: Date): { y: number; m: number; d: number } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+  const get = (type: string) => Number(parts.find(p => p.type === type)!.value)
+  return { y: get('year'), m: get('month'), d: get('day') }
+}
+
 export function hitungDurasiHariMalam(berangkat: Date, kembali: Date) {
-  const startD = new Date(berangkat.getFullYear(), berangkat.getMonth(), berangkat.getDate())
-  const endD   = new Date(kembali.getFullYear(), kembali.getMonth(), kembali.getDate())
-  const diffDays = Math.floor((endD.getTime() - startD.getTime()) / (1000 * 60 * 60 * 24))
+  const s = jakartaYmd(berangkat)
+  const e = jakartaYmd(kembali)
+  // Compare pure calendar days via UTC epoch so no DST/offset skew leaks in.
+  const startD = Date.UTC(s.y, s.m - 1, s.d)
+  const endD   = Date.UTC(e.y, e.m - 1, e.d)
+  const diffDays = Math.floor((endD - startD) / (1000 * 60 * 60 * 24))
 
   if (diffDays < 0) {
     throw new AppError('Tanggal kembali tidak boleh sebelum tanggal berangkat', 400)
@@ -62,6 +80,8 @@ export async function getPaguAktif(
         or(isNull(refPagu.berlakuSampai), gte(refPagu.berlakuSampai, tanggalStr)),
       ),
     )
+    // Deterministically pick the most recently effective pagu when versions overlap.
+    .orderBy(sql`${refPagu.berlakuDari} DESC NULLS LAST`)
     .limit(1)
 
   if (!rows.length) return null
@@ -169,6 +189,18 @@ export async function validateRincianAgainstPagu(params: {
       throw new AppError(`Pagu untuk '${label}' belum dikonfigurasi`, 400)
     }
     if (pagu.isUnlimited || !pagu.hasPagu) continue
+
+    // The pagu ceiling (paguMax) is denominated in the pagu row's currency. Comparing a
+    // USD submission against an IDR ceiling (or vice-versa) is meaningless and would let
+    // over-budget requests through or wrongly reject valid ones. Reject the mismatch.
+    if (item.useDollar !== pagu.useDollar) {
+      const paguCur = pagu.useDollar ? 'USD' : 'IDR'
+      const itemCur = item.useDollar ? 'USD' : 'IDR'
+      throw new AppError(
+        `Mata uang '${label}' (${itemCur}) tidak sesuai dengan pagu (${paguCur}). Perbaiki mata uang rincian.`,
+        400,
+      )
+    }
 
     const nilaiDiajukan = item.useDollar
       ? Number(item.nilaiUsd ?? item.nilaiTotal)

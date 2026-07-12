@@ -6,12 +6,12 @@ import {
   adminApproveDpService, ptApproveService, sdmApproveService,
   listBtoService, listBtoApprovalsService, listBtoApprovalsHistoryService,
 } from '../services/bto.service'
-import { kalkulasiPaguBto, getGradeIdByLevel } from '../services/pagu.service'
+import { kalkulasiPaguBto, getGradeIdByLevel, hitungDurasiHariMalam } from '../services/pagu.service'
 import { reverseGeocode, getWilayahTipe, haversineKm, resolveEmployeePenempatan } from '../services/geocoding.service'
 import { db } from '../db/connection'
 import { attendStamp, bte, bteApprovalLog, bto, btoApprovalLog, configPemberiTugas, localUserCache, spdk, spdkApprovalLog } from '../db/schema'
 import { eq, and, or, inArray, desc } from 'drizzle-orm'
-import { ok, paginated } from '../utils/response'
+import { ok, paginated, parsePagination } from '../utils/response'
 import { AppError } from '../utils/errorHandler'
 import path from 'path'
 import fs from 'fs'
@@ -162,6 +162,7 @@ export default async function btoRoutes(fastify: FastifyInstance) {
   /** GET /api/bto — List BTO */
   fastify.get('/', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const q = req.query as any
+    const { page, limit } = parsePagination(q)
     const roles = (req.user.role ?? '').split(',')
     const userCache = await db.query.localUserCache.findFirst({
       where: eq(localUserCache.portalUserId, req.user.sub),
@@ -176,10 +177,10 @@ export default async function btoRoutes(fastify: FastifyInstance) {
       status: q.status,
       dateFrom: q.dateFrom ? new Date(q.dateFrom) : undefined,
       dateTo: q.dateTo ? new Date(q.dateTo) : undefined,
-      page: Number(q.page ?? 1),
-      limit: Number(q.limit ?? 20),
+      page,
+      limit,
     })
-    return reply.send(paginated(result.rows, Number(q.page ?? 1), Number(q.limit ?? 20), result.total))
+    return reply.send(paginated(result.rows, page, limit, result.total))
   })
 
   /** GET /api/bto/approvals — List BTO waiting for actor's approval */
@@ -306,10 +307,15 @@ export default async function btoRoutes(fastify: FastifyInstance) {
     const data = await req.file()
     if (!data) throw new AppError('File tidak ditemukan', 400)
 
+    const ext = path.extname(data.filename).toLowerCase()
+    const allowedExt = new Set(['.pdf', '.png', '.jpg', '.jpeg', '.webp'])
+    if (!allowedExt.has(ext)) {
+      throw new AppError('Lampiran wajib berupa PDF atau gambar (PNG/JPG/WEBP)', 400)
+    }
+
     const uploadDir = path.resolve(config.upload.dir, 'bto', id)
     if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true })
 
-    const ext = path.extname(data.filename)
     const filename = `lampiran_${Date.now()}${ext}`
     const filepath = path.join(uploadDir, filename)
 
@@ -466,11 +472,7 @@ export default async function btoRoutes(fastify: FastifyInstance) {
 
     const estBerangkat = new Date(btoRow.estBerangkat)
     const estKembali = new Date(btoRow.estKembali)
-    const startD = new Date(estBerangkat.getFullYear(), estBerangkat.getMonth(), estBerangkat.getDate())
-    const endD = new Date(estKembali.getFullYear(), estKembali.getMonth(), estKembali.getDate())
-    const diffDays = Math.floor((endD.getTime() - startD.getTime()) / (1000 * 60 * 60 * 24))
-    const jumlahHari = diffDays + 1
-    const jumlahMalam = Math.max(0, diffDays)
+    const { jumlahHari, jumlahMalam } = hitungDurasiHariMalam(estBerangkat, estKembali)
 
     const paguList = await kalkulasiPaguBto({
       gradeId,
@@ -585,11 +587,7 @@ export default async function btoRoutes(fastify: FastifyInstance) {
 
     const start = new Date(estBerangkat)
     const end = new Date(estKembali)
-    const startD = new Date(start.getFullYear(), start.getMonth(), start.getDate())
-    const endD = new Date(end.getFullYear(), end.getMonth(), end.getDate())
-    const diffDays = Math.floor((endD.getTime() - startD.getTime()) / (1000 * 60 * 60 * 24))
-    const jumlahHari = diffDays + 1
-    const jumlahMalam = Math.max(0, diffDays)
+    const { jumlahHari, jumlahMalam } = hitungDurasiHariMalam(start, end)
 
     const paguList = await kalkulasiPaguBto({
       gradeId,

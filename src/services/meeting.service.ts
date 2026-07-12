@@ -48,6 +48,11 @@ export async function createMeetingService(createdBy: string, createdByNama: str
     throw new AppError('Waktu mulai meeting tidak boleh di masa lalu', 400)
   }
 
+  // Waktu selesai harus setelah waktu mulai
+  if (new Date(data.selesai) <= new Date(data.mulai)) {
+    throw new AppError('Waktu selesai meeting harus setelah waktu mulai', 400)
+  }
+
   // Cek konflik ruang
   if (data.ruangId) {
     const conflict = await checkRuangConflict(data.ruangId, data.mulai, data.selesai)
@@ -109,6 +114,9 @@ export async function updateMeetingService(
   const checkMulai   = data.mulai   ?? mt.mulai
   const checkSelesai = data.selesai ?? mt.selesai
   const checkRuang   = data.ruangId ?? mt.ruangId
+  if (new Date(checkSelesai) <= new Date(checkMulai)) {
+    throw new AppError('Waktu selesai meeting harus setelah waktu mulai', 400)
+  }
   if (checkRuang) {
     const conflict = await checkRuangConflict(checkRuang, checkMulai, checkSelesai, id)
     if (conflict) throw new AppError('Ruang meeting sudah dibooking pada jam yang sama', 409)

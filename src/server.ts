@@ -43,8 +43,20 @@ const fastify = Fastify({
 fastify.setErrorHandler(errorHandler);
 
 async function bootstrap() {
-  // CORS & Multi-part upload setup
-  await fastify.register(cors, { origin: true, credentials: true });
+  // CORS & Multi-part upload setup.
+  // Restrict to configured browser origins (CORS_ORIGINS) since credentials are allowed.
+  // Non-browser callers (no Origin header, e.g. server-to-server SSO, curl) are permitted.
+  const allowedOrigins = new Set(config.cors.origins);
+  await fastify.register(cors, {
+    origin(origin, cb) {
+      if (!origin || allowedOrigins.has(origin)) {
+        cb(null, true);
+        return;
+      }
+      cb(new Error('Origin tidak diizinkan'), false);
+    },
+    credentials: true,
+  });
   await fastify.register(multipart, {
     limits: { fileSize: config.upload.maxSizeMB * 1024 * 1024 },
   });

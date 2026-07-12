@@ -18,18 +18,34 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 
   JWT_SECRET: z.string().min(32),
-  JWT_EXPIRES_IN: z.string().default('15m'),
-  REFRESH_TOKEN_EXPIRES_IN: z.string().default('30d'),
+  // Access token: umur pendek, di-refresh diam-diam oleh frontend (lihat apiFetch).
+  JWT_EXPIRES_IN: z.string().default('30m'),
+  // Refresh token = batas idle sebelum user wajib login ulang. Berotasi tiap dipakai,
+  // jadi selama user aktif sesi diperpanjang otomatis; 12 jam menutup satu hari kerja penuh.
+  REFRESH_TOKEN_EXPIRES_IN: z.string().default('12h'),
 
   PORTAL_API_URL: z.string().url(),
   SSO_INTERNAL_TOKEN: z.string().default('secret_development_token'),
   GOOGLE_MAPS_API_KEY: z.string().default(''),
+
+  // Comma-separated list of allowed browser origins for CORS.
+  CORS_ORIGINS: z.string().default('http://localhost:3004,http://localhost:3002'),
 
   ATTEND_RADIUS_METER: z.coerce.number().default(500),
 
   UPLOAD_DIR: z.string().default('uploads'),
   UPLOAD_URL: z.string(),
   UPLOAD_MAX_SIZE_MB: z.coerce.number().default(10),
+}).superRefine((env, ctx) => {
+  // In production the internal SSO token MUST be overridden — falling back to the
+  // well-known default would let anyone forge internal Portal calls.
+  if (env.NODE_ENV === 'production' && env.SSO_INTERNAL_TOKEN === 'secret_development_token') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['SSO_INTERNAL_TOKEN'],
+      message: 'SSO_INTERNAL_TOKEN wajib diganti untuk production',
+    })
+  }
 })
 
 const parsed = envSchema.safeParse(process.env)
@@ -61,6 +77,9 @@ export const config = {
   portal: {
     apiUrl: d.PORTAL_API_URL,
     internalToken: d.SSO_INTERNAL_TOKEN,
+  },
+  cors: {
+    origins: d.CORS_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean),
   },
   googleMaps: {
     apiKey: d.GOOGLE_MAPS_API_KEY,

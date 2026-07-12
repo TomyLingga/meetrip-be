@@ -43,8 +43,10 @@ type AttendStampRow = typeof attendStamp.$inferSelect
 
 let LOGO_SRC = ''
 let LOGO_RIGHT_SRC = ''
+// Logos are read from the tracked src/assets folder so they always ship with the
+// repo (previously they lived in the gitignored uploads/ and the disposable contoh/).
 try {
-  const logoPath = path.join(process.cwd(), 'uploads', 'documents', 'inl.png')
+  const logoPath = path.join(process.cwd(), 'src', 'assets', 'inl.png')
   const logoBase64 = fs.readFileSync(logoPath).toString('base64')
   LOGO_SRC = `data:image/png;base64,${logoBase64}`
 } catch (e) {
@@ -52,7 +54,7 @@ try {
 }
 
 try {
-  const logoRightPath = path.join(process.cwd(), 'contoh', 'logo_INL_right.png')
+  const logoRightPath = path.join(process.cwd(), 'src', 'assets', 'logo_INL_right.png')
   const logoRightBase64 = fs.readFileSync(logoRightPath).toString('base64')
   LOGO_RIGHT_SRC = `data:image/png;base64,${logoRightBase64}`
 } catch (e) {
@@ -431,8 +433,11 @@ async function renderDp(btoRow: BtoRow, owner: any, dpRow: any, logs: DpLog[]) {
 
   let ptRow = null
   if (btoRow.pemberiTugasId) {
-    const cached = await db.select().from(localUserCache).where(eq(localUserCache.id, btoRow.pemberiTugasId)).limit(1)
-    ptRow = cached[0] || null
+    // pemberiTugasId is a portalUserId/employeeId, NOT the local_user_cache PK. Match
+    // on the correct columns (same as renderBto) so the pemberi-tugas block isn't blank.
+    const cachedByPortal = await db.select().from(localUserCache).where(eq(localUserCache.portalUserId, btoRow.pemberiTugasId)).limit(1)
+    const cachedByEmployee = cachedByPortal[0] ? [] : await db.select().from(localUserCache).where(eq(localUserCache.employeeId, btoRow.pemberiTugasId)).limit(1)
+    ptRow = cachedByPortal[0] || cachedByEmployee[0] || null
   }
 
   // Generate QR for Finance approval of DP (from btoApprovalLog table where tahap === 'admin_dp')
@@ -497,8 +502,11 @@ async function renderBte(btoRow: BtoRow, owner: any, bteRow: any, logs: BteLog[]
 
   let ptRow = null
   if (btoRow.pemberiTugasId) {
-    const cached = await db.select().from(localUserCache).where(eq(localUserCache.id, btoRow.pemberiTugasId)).limit(1)
-    ptRow = cached[0] || null
+    // pemberiTugasId is a portalUserId/employeeId, NOT the local_user_cache PK. Match
+    // on the correct columns (same as renderBto) so the pemberi-tugas block isn't blank.
+    const cachedByPortal = await db.select().from(localUserCache).where(eq(localUserCache.portalUserId, btoRow.pemberiTugasId)).limit(1)
+    const cachedByEmployee = cachedByPortal[0] ? [] : await db.select().from(localUserCache).where(eq(localUserCache.employeeId, btoRow.pemberiTugasId)).limit(1)
+    ptRow = cachedByPortal[0] || cachedByEmployee[0] || null
   }
 
   // Get dpRow if it exists, to support down payment comparison in BTE
@@ -718,7 +726,10 @@ async function assertDocumentAccess(btoRow: BtoRow, user: any, passedSpdkRow?: t
     debugInfo.resolvedKabagId = resolvedKabag.id
   } catch (e) {}
 
-  throw new AppError(`Tidak diizinkan membuka dokumen ini. Debug: ${JSON.stringify(debugInfo)}`, 403)
+  // Log the resolution context server-side for debugging, but never leak internal
+  // ids (userIds/employeeId/pemberiTugasId/kabag) to the client.
+  console.warn('[Document] Access denied', JSON.stringify(debugInfo))
+  throw new AppError('Tidak diizinkan membuka dokumen ini.', 403)
 }
 
 export default async function documentRoutes(fastify: FastifyInstance) {

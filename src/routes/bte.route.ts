@@ -87,17 +87,29 @@ export default async function bteRoutes(fastify: FastifyInstance) {
 
   /** POST /api/bte/bto/:btoId/upload-laporan — Upload PDF Laporan Perjalanan Dinas */
   fastify.post('/bto/:btoId/upload-laporan', { preHandler: [fastify.authenticate] }, async (req, reply) => {
-    const { btoId } = req.params as { btoId: string };
+    const { btoId } = z.object({ btoId: z.string().uuid() }).parse(req.params);
+
+    // Verify the BTO exists and belongs to the caller BEFORE touching the filesystem.
+    // (Validating btoId as a UUID also prevents path traversal via the upload dir.)
+    const [btoRow] = await db.select().from(bto).where(eq(bto.id, btoId)).limit(1);
+    if (!btoRow) throw new AppError('BTO tidak ditemukan', 404);
+
+    const isAdmin = (req.user.role || '').split(',').some(r => ['super_admin', 'admin'].includes(r));
+    if (!isAdmin && btoRow.employeeId !== req.user.sub) {
+      throw new AppError('Tidak diizinkan mengupload laporan BTE ini', 403);
+    }
+
     const data = await req.file();
     if (!data) throw new AppError('File laporan tidak ditemukan', 400);
-
-    const uploadDir = path.resolve(config.upload.dir, 'bte', btoId);
-    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
     const ext = path.extname(data.filename);
     if (ext.toLowerCase() !== '.pdf') {
       throw new AppError('Laporan harus berupa file PDF', 400);
     }
+
+    const uploadDir = path.resolve(config.upload.dir, 'bte', btoId);
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
     const filename = `laporan_${Date.now()}${ext}`;
     const filepath = path.join(uploadDir, filename);
 
@@ -109,7 +121,7 @@ export default async function bteRoutes(fastify: FastifyInstance) {
     });
 
     const fileRelativePath = `bte/${btoId}/${filename}`;
-    
+
     // Find or create BTE first
     let bteRow = await db.query.bte.findFirst({ where: eq(bte.btoId, btoId) });
     if (!bteRow) {
@@ -129,8 +141,7 @@ export default async function bteRoutes(fastify: FastifyInstance) {
     }
 
     // Update BTO status to REPORT_UPLOADED if BTO is currently ATTENDED
-    const [btoRow] = await db.select().from(bto).where(eq(bto.id, btoId)).limit(1);
-    if (btoRow && btoRow.status === 'ATTENDED') {
+    if (btoRow.status === 'ATTENDED') {
       await db.update(bto).set({ status: 'REPORT_UPLOADED', updatedAt: new Date() }).where(eq(bto.id, btoId));
     }
 

@@ -359,8 +359,14 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
   /** GET /api/dashboard/export-excel — Download Excel */
   fastify.get('/export-excel', { preHandler: [fastify.authenticateAdmin] }, async (req, reply) => {
     const q = req.query as any;
-    const dateFrom = q.dateFrom ? new Date(q.dateFrom) : undefined;
-    const dateTo = q.dateTo ? new Date(q.dateTo) : undefined;
+    // Guard against invalid date strings producing an Invalid Date passed to the query.
+    const toValidDate = (v: unknown): Date | undefined => {
+      if (!v) return undefined;
+      const d = new Date(String(v));
+      return Number.isNaN(d.getTime()) ? undefined : d;
+    };
+    const dateFrom = toValidDate(q.dateFrom);
+    const dateTo = toValidDate(q.dateTo);
     const status = q.status || undefined;
 
     const buffer = await exportBtoExcelService({ dateFrom, dateTo, status });

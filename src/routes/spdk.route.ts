@@ -14,7 +14,7 @@ import {
 import { db } from '../db/connection';
 import { spdk, spdkApprovalLog } from '../db/schema';
 import { eq, desc, and, gte, lte, sql } from 'drizzle-orm';
-import { ok, paginated } from '../utils/response';
+import { ok, paginated, parsePagination } from '../utils/response';
 import { AppError } from '../utils/errorHandler';
 
 const attendSchema = z.object({
@@ -60,8 +60,7 @@ export default async function spdkRoutes(fastify: FastifyInstance) {
   /** GET /api/spdk — List SPDK (Admin/SDM) */
   fastify.get('/', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const q = req.query as any;
-    const page = Number(q.page || 1);
-    const limit = Number(q.limit || 20);
+    const { page, limit } = parsePagination(q);
     const offset = (page - 1) * limit;
 
     const conditions = [];

@@ -310,7 +310,7 @@ export async function submitBtoService(id: string, actor: { id: string; nama: st
     tujuanAlamat:  geo.alamat || existing.tujuanNama,
     tujuanProvinsi: geo.provinsi ?? undefined,
     tujuanNegara:  tujuanNegara ?? undefined,
-    jarakKm:       jarakKm ? String(jarakKm.toFixed(2)) : undefined,
+    jarakKm:       jarakKm != null ? String(jarakKm.toFixed(2)) : undefined,
     transportLabel,
     updatedAt:     now,
   }).where(eq(bto.id, id))
@@ -646,8 +646,6 @@ export async function listBtoApprovalsService(actor: { id: string; employeeId?: 
       )
     )
   }
-
-  if (roleConditions.length === 0) return []
 
   if (roleConditions.length === 0) return []
 

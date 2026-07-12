@@ -133,7 +133,15 @@ export async function createOrUpdateBteService(
     })),
   });
 
-  const exchangeRate = data.exchangeRateUsd || 1;
+  // If any rincian or biaya lain is in USD, a real positive exchange rate is mandatory —
+  // otherwise USD amounts would be booked into totalIdr at 1:1 (e.g. USD 500 → Rp 500).
+  const hasUsd =
+    data.rincian.some((r) => r.useDollar) ||
+    (data.biayaLain?.some((bl) => bl.useDollar) ?? false);
+  if (hasUsd && !(Number(data.exchangeRateUsd) > 0)) {
+    throw new AppError('Kurs USD (exchangeRateUsd) wajib diisi dan lebih dari 0 karena ada biaya dalam USD', 400);
+  }
+  const exchangeRate = Number(data.exchangeRateUsd) > 0 ? Number(data.exchangeRateUsd) : 1;
   let totalIdr = 0;
   let totalUsd = 0;
 

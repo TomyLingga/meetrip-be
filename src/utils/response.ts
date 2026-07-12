@@ -20,3 +20,25 @@ export function paginated<T>(
     },
   }
 }
+
+/**
+ * Safely parse & clamp pagination query params.
+ * page ≥ 1, limit within [1, maxLimit] (default max 100) to avoid unbounded scans.
+ */
+export function parsePagination(
+  query: { page?: unknown; limit?: unknown },
+  opts: { defaultLimit?: number; maxLimit?: number } = {},
+) {
+  const defaultLimit = opts.defaultLimit ?? 20
+  const maxLimit = opts.maxLimit ?? 100
+
+  const rawPage = Number(query.page)
+  const rawLimit = Number(query.limit)
+
+  const page = Number.isFinite(rawPage) && rawPage >= 1 ? Math.floor(rawPage) : 1
+  const limit = Number.isFinite(rawLimit) && rawLimit >= 1
+    ? Math.min(Math.floor(rawLimit), maxLimit)
+    : defaultLimit
+
+  return { page, limit }
+}

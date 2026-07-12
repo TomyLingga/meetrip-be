@@ -58,7 +58,13 @@ export async function createOrUpdateDpService(
   });
   const isNew = !dpRow;
 
-  const exchangeRate = data.exchangeRateUsd || 1;
+  // If any rincian is in USD, a real positive exchange rate is mandatory — otherwise
+  // USD amounts would be booked into totalIdr at a 1:1 rate (e.g. USD 500 → Rp 500).
+  const hasUsdRincian = data.rincian.some((r) => r.useDollar);
+  if (hasUsdRincian && !(Number(data.exchangeRateUsd) > 0)) {
+    throw new AppError('Kurs USD (exchangeRateUsd) wajib diisi dan lebih dari 0 karena ada rincian dalam USD', 400);
+  }
+  const exchangeRate = Number(data.exchangeRateUsd) > 0 ? Number(data.exchangeRateUsd) : 1;
   let totalIdr = 0;
   let totalUsd = 0;
 
