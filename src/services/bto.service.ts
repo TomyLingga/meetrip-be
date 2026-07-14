@@ -112,6 +112,13 @@ export async function updateBtoService(
     throw new AppError(`BTO dengan status ${existing.status} tidak bisa diubah`, 400)
   }
 
+  // butuhDp menentukan routing approval (ADMIN_DP_REVIEW). Kunci setelah BTO
+  // keluar dari DRAFT agar resubmit dari REVISION_DP tidak bisa mematikan
+  // butuhDp untuk melewati review DP yang diminta admin.
+  if (existing.status !== 'DRAFT' && data.butuhDp !== undefined) {
+    delete data.butuhDp
+  }
+
   const coordsChanged = data.tujuanLat !== undefined || data.tujuanLng !== undefined
   if (coordsChanged || data.wilayahTipe !== undefined) {
     const lat = Number(data.tujuanLat ?? existing.tujuanLat)
@@ -231,11 +238,17 @@ export async function submitBtoService(id: string, actor: { id: string; nama: st
   const tujuanNegara = geo.negara ?? fallbackNegaraFromWilayah(existing.wilayahTipe)
   // Wilayah final selalu dihitung kembali dari koordinat dan provinsi. Nilai pada
   // draft hanya bersifat preview agar hasil lama yang keliru tidak ikut terkunci.
-  const wilayah = getWilayahTipe(
+  let wilayah = getWilayahTipe(
     userProvinsi,
     geo.provinsi,
     tujuanNegara,
   )
+  // Fail-safe: bila draft sudah menandai luar_negeri tetapi reverse-geocode gagal
+  // mengembalikan data negara (geo.negara null), jangan turunkan ke luar_wilayah —
+  // itu membuat pengecekan pagu memakai plafon domestik untuk perjalanan luar negeri.
+  if (existing.wilayahTipe === 'luar_negeri' && geo.negara == null) {
+    wilayah = 'luar_negeri'
+  }
 
   // Hitung jarak dari penempatan ke tujuan
   let jarakKm: number | undefined
@@ -282,14 +295,21 @@ export async function submitBtoService(id: string, actor: { id: string; nama: st
     })
   }
 
-  // Generate nomor BTO
-  const now      = new Date()
-  const tahun    = now.getFullYear()
-  const seqRow   = await db.execute(
-    sql`SELECT COALESCE(MAX(sequence), 0) + 1 AS next_seq FROM bto WHERE tahun = ${tahun}`
-  )
-  const sequence = Number((seqRow.rows[0] as any).next_seq)
-  const nomorBto = generateNomor(sequence, 'BTO', now)
+  // Generate nomor BTO hanya pada submit pertama. Resubmit dari REVISION_DP
+  // harus mempertahankan nomor & sequence yang sudah terbit agar nomor surat
+  // resmi tidak berubah dan sequence tahunan tidak bolong.
+  const now = new Date()
+  let nomorBto = existing.nomorBto
+  let tahun    = existing.tahun
+  let sequence = existing.sequence
+  if (!nomorBto) {
+    tahun = now.getFullYear()
+    const seqRow = await db.execute(
+      sql`SELECT COALESCE(MAX(sequence), 0) + 1 AS next_seq FROM bto WHERE tahun = ${tahun}`
+    )
+    sequence = Number((seqRow.rows[0] as any).next_seq)
+    nomorBto = generateNomor(sequence, 'BTO', now)
+  }
 
   // Tentukan status berikutnya
   const nextStatus = existing.butuhDp ? 'ADMIN_DP_REVIEW' : 'PT_REVIEW'

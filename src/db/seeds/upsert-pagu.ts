@@ -14,22 +14,22 @@ async function main() {
 
   const pagusToUpsert = [
     // --- BOM-4 (dalam_wilayah) ---
-    { rincianId: laundryId, gradeId: bom4GradeId, wilayahTipe: 'dalam_wilayah', nilai: '0.00', useDollar: false, isUnlimited: true },
-    { rincianId: hotelId, gradeId: bom4GradeId, wilayahTipe: 'dalam_wilayah', nilai: '0.00', useDollar: false, isUnlimited: true },
+    { rincianId: laundryId, gradeId: bom4GradeId, wilayahTipe: 'dalam_wilayah', nilai: '0.00', useDollar: false, isUnlimited: false },
+    { rincianId: hotelId, gradeId: bom4GradeId, wilayahTipe: 'dalam_wilayah', nilai: '0.00', useDollar: false, isUnlimited: false },
     { rincianId: uangSakuId, gradeId: bom4GradeId, wilayahTipe: 'dalam_wilayah', nilai: '900000.00', useDollar: false, isUnlimited: false },
 
     // --- BOM-4 (luar_wilayah) ---
-    { rincianId: laundryId, gradeId: bom4GradeId, wilayahTipe: 'luar_wilayah', nilai: '0.00', useDollar: false, isUnlimited: true },
+    { rincianId: laundryId, gradeId: bom4GradeId, wilayahTipe: 'luar_wilayah', nilai: '0.00', useDollar: false, isUnlimited: false },
     { rincianId: hotelId, gradeId: bom4GradeId, wilayahTipe: 'luar_wilayah', nilai: '1200000.00', useDollar: false, isUnlimited: false }, // Fixed typo from 12000 to 1200000
     { rincianId: uangSakuId, gradeId: bom4GradeId, wilayahTipe: 'luar_wilayah', nilai: '900000.00', useDollar: false, isUnlimited: false },
 
     // --- BOM-4 (luar_negeri) ---
-    { rincianId: laundryId, gradeId: bom4GradeId, wilayahTipe: 'luar_negeri', nilai: '0.00', useDollar: false, isUnlimited: true },
-    { rincianId: hotelId, gradeId: bom4GradeId, wilayahTipe: 'luar_negeri', nilai: '0.00', useDollar: false, isUnlimited: true },
-    { rincianId: uangSakuId, gradeId: bom4GradeId, wilayahTipe: 'luar_negeri', nilai: '0.00', useDollar: false, isUnlimited: true },
+    { rincianId: laundryId, gradeId: bom4GradeId, wilayahTipe: 'luar_negeri', nilai: '0.00', useDollar: false, isUnlimited: false },
+    { rincianId: hotelId, gradeId: bom4GradeId, wilayahTipe: 'luar_negeri', nilai: '0.00', useDollar: false, isUnlimited: false },
+    { rincianId: uangSakuId, gradeId: bom4GradeId, wilayahTipe: 'luar_negeri', nilai: '0.00', useDollar: false, isUnlimited: false },
 
     // --- BOM-3 (dalam_wilayah) ---
-    { rincianId: laundryId, gradeId: bom3GradeId, wilayahTipe: 'dalam_wilayah', nilai: '0.00', useDollar: false, isUnlimited: true },
+    { rincianId: laundryId, gradeId: bom3GradeId, wilayahTipe: 'dalam_wilayah', nilai: '0.00', useDollar: false, isUnlimited: false },
     { rincianId: hotelId, gradeId: bom3GradeId, wilayahTipe: 'dalam_wilayah', nilai: '1200000.00', useDollar: false, isUnlimited: false },
     { rincianId: uangSakuId, gradeId: bom3GradeId, wilayahTipe: 'dalam_wilayah', nilai: '900000.00', useDollar: false, isUnlimited: false },
 

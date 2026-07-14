@@ -22,18 +22,26 @@ export function bteLuarNegeriPrintTemplate(data: any) {
 
         const rincianList = bteRow?.bteRincian || [];
         const formatKategoriName = (kat: string) => {
-                switch (kat) {
+                const k = kat ? kat.toLowerCase() : '';
+                switch (k) {
                         case 'saku': return 'POCKET MONEY / UANG SAKU';
                         case 'hotel': return 'HOTEL / ACCOMMODATION';
                         case 'laundry': return 'LAUNDRY';
                         case 'transport': return 'TRANSPORTATION / TICKET';
-                        case 'lain_lain': return 'OTHERS / BIAYA LAIN';
-                        default: return kat.toUpperCase();
+                        case 'meal': return 'MEAL ALLOWANCE / UANG MAKAN';
+                        case 'lain_lain':
+                        case 'lain-lain':
+                        case 'others':
+                                return 'OTHERS / BIAYA LAIN';
+                        default:
+                                return kat ? kat.replace(/_/g, ' ').toUpperCase() : 'OTHERS / BIAYA LAIN';
                 }
         };
 
         const groupedRincian = rincianList.reduce((acc: any, curr: any) => {
-                const k = curr.kategori || 'lain_lain';
+                let k = curr.kategori || 'lain_lain';
+                k = k.toLowerCase();
+                if (k === 'lain-lain' || k === 'others') k = 'lain_lain';
                 if (!acc[k]) acc[k] = [];
                 acc[k].push(curr);
                 return acc;
@@ -131,7 +139,7 @@ export function bteLuarNegeriPrintTemplate(data: any) {
                 }
                 .header-table td, .header-table th {
                         border: 1px solid #000;
-                        padding: 4px 6px;
+                        padding: 2px 4px;
                         vertical-align: middle;
                         box-sizing: border-box;
                 }
@@ -205,7 +213,7 @@ export function bteLuarNegeriPrintTemplate(data: any) {
                 }
                 .content-table td {
                         border: 1px solid black;
-                        padding: 6px 6px;
+                        padding: 2px 4px;
                         vertical-align: top;
                 }
                 .text-right {
@@ -281,7 +289,7 @@ export function bteLuarNegeriPrintTemplate(data: any) {
         <table class="content-table">
                 <tr>
                         <td width="5%" align="center">I</td>
-                        <td width="30%" class="bold" style="font-style: italic;">SPJ/BTO NUMBER</td>
+                        <td width="30%" class="bold" style="font-style: italic;">SPDK/BTO NUMBER</td>
                         <td colspan="5">: &nbsp; ${esc(btoRow.nomorBto || 'SURAT BELUM DITERBITKAN')}</td>
                 </tr>
                 <tr>

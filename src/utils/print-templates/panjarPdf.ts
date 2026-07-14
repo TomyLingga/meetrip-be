@@ -41,14 +41,26 @@ export function panjarPrintTemplate(
   const rincianList = dpRow?.dpRincian || [];
   
   const formatKategoriName = (kat: string) => {
-    if (!kat || kat.toLowerCase() === 'lain_lain' || kat.toLowerCase() === 'lain-lain') {
-      return 'OTHERS / BIAYA LAIN';
+    const k = kat ? kat.toLowerCase() : '';
+    switch (k) {
+      case 'saku': return 'UANG SAKU / POCKET MONEY';
+      case 'hotel': return 'AKOMODASI / HOTEL';
+      case 'laundry': return 'LAUNDRY';
+      case 'transport': return 'TRANSPORTASI / TRAVEL';
+      case 'meal': return 'UANG MAKAN / MEAL ALLOWANCE';
+      case 'lain_lain':
+      case 'lain-lain':
+      case 'others':
+        return 'LAIN-LAIN / OTHERS';
+      default:
+        return kat ? kat.replace(/_/g, ' ').toUpperCase() : 'LAIN-LAIN / OTHERS';
     }
-    return kat.toUpperCase();
   };
 
   const groupedRincian = rincianList.reduce((acc: any, curr: any) => {
-    const k = curr.kategori || 'lain_lain';
+    let k = curr.kategori || 'lain_lain';
+    k = k.toLowerCase();
+    if (k === 'lain-lain' || k === 'others') k = 'lain_lain';
     if (!acc[k]) acc[k] = [];
     acc[k].push(curr);
     return acc;
@@ -104,7 +116,7 @@ export function panjarPrintTemplate(
           <td></td>
           <td class="subno" style="font-weight: bold;">${romanNumber}.${catIndex}</td>
           <td class="label" style="font-weight: bold;" colspan="2">${formatKategoriName(kategori)}</td>
-          <td style="font-weight: bold;">: &nbsp; ${catTotalStr}</td>
+          <td></td>
         </tr>
         ${itemsHtml}
       `;
@@ -171,7 +183,7 @@ export function panjarPrintTemplate(
                 }
                 .header-table td, .header-table th {
                         border: 1px solid #000;
-                        padding: 8px;
+                        padding: 2px;
                         vertical-align: middle;
                         box-sizing: border-box;
                 }
@@ -246,7 +258,7 @@ export function panjarPrintTemplate(
                 }
                 .content-table td {
                         border: 1px solid #20242a;
-                        padding: 6px 6px;
+                        padding: 2px 6px;
                         vertical-align: middle;
                 }
                 .sizing-row td {
@@ -365,9 +377,9 @@ export function panjarPrintTemplate(
                 <table class="content-table">
                         <colgroup>
                                 <col style="width: 5%;">
-                                <col style="width: 5%;">
-                                <col style="width: 5%;">
-                                <col style="width: 30%;">
+                                <col style="width: 7%;">
+                                <col style="width: 8%;">
+                                <col style="width: 25%;">
                                 <col style="width: 55%;">
                         </colgroup>
                         <tr class="sizing-row"><td></td><td></td><td></td><td></td><td></td></tr>

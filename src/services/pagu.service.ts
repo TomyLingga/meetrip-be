@@ -110,22 +110,6 @@ export async function kalkulasiPaguBto(params: {
   const results: PaguResult[] = []
 
   for (const rincian of rincianList) {
-    if (!rincian.hasPagu) {
-      results.push({
-        rincianId:    rincian.id,
-        rincianLabel: rincian.label,
-        kategori:     rincian.kategori || 'lain_lain',
-        isUnlimited:  true,
-        hasPagu:      false,
-        perMalam:     rincian.perMalam,
-        useDollar:    rincian.useDollarOverride,
-        nilaiPerHari: 0,
-        nilaiTotal:   0,
-        paguMax:      0,
-      })
-      continue
-    }
-
     const pagu = await getPaguAktif(rincian.id, params.gradeId, params.wilayahTipe, params.tanggal)
 
     if (!pagu) {
@@ -133,10 +117,10 @@ export async function kalkulasiPaguBto(params: {
         rincianId:    rincian.id,
         rincianLabel: rincian.label,
         kategori:     rincian.kategori || 'lain_lain',
-        isUnlimited:  true,
+        isUnlimited:  false,
         hasPagu:      false,
         perMalam:     rincian.perMalam,
-        useDollar:    rincian.useDollarOverride,
+        useDollar:    false,
         nilaiPerHari: 0,
         nilaiTotal:   0,
         paguMax:      0,
@@ -152,7 +136,7 @@ export async function kalkulasiPaguBto(params: {
       rincianLabel: rincian.label,
       kategori:     rincian.kategori || 'lain_lain',
       isUnlimited:  pagu.isUnlimited,
-      hasPagu:      true,
+      hasPagu:      !pagu.isUnlimited,
       perMalam:     rincian.perMalam,
       useDollar:    pagu.useDollar,
       nilaiPerHari: pagu.nilai,
@@ -188,7 +172,14 @@ export async function validateRincianAgainstPagu(params: {
     if (!pagu) {
       throw new AppError(`Pagu untuk '${label}' belum dikonfigurasi`, 400)
     }
-    if (pagu.isUnlimited || !pagu.hasPagu) continue
+    if (pagu.isUnlimited) continue
+    // Rincian aktif tanpa baris pagu untuk grade+wilayah+tanggal ini datang dengan
+    // hasPagu=false & paguMax=0. Jangan bandingkan ke plafon 0 (menolak semua nilai
+    // dengan pesan "melebihi pagu 0" yang membingungkan) — beri pesan konfigurasi
+    // yang jelas agar admin melengkapi master pagu.
+    if (!pagu.hasPagu) {
+      throw new AppError(`Pagu untuk '${label}' belum dikonfigurasi untuk grade/wilayah ini`, 400)
+    }
 
     // The pagu ceiling (paguMax) is denominated in the pagu row's currency. Comparing a
     // USD submission against an IDR ceiling (or vice-versa) is meaningless and would let

@@ -4,6 +4,10 @@ export function panjarLuarNegeriPrintTemplate(data: any) {
   const departureTime = btoRow.estBerangkat ? new Date(btoRow.estBerangkat).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', timeZone: 'Asia/Jakarta'}).replace('.', ':') : '07:00';
   const arrivalTime = btoRow.estKembali ? new Date(btoRow.estKembali).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', timeZone: 'Asia/Jakarta'}).replace('.', ':') : '23:00';
 
+  const financeQrMark = financeQr
+    ? `<img src="${financeQr}" class="personalia-qr" />`
+    : `<div class="personalia-qr-placeholder">QR</div>`;
+
   const jobLevelName = (level: number) => {
     switch (level) {
       case 1: return 'JUNIOR STAFF/EQUAL';
@@ -13,7 +17,7 @@ export function panjarLuarNegeriPrintTemplate(data: any) {
       case 5: return 'GENERAL MANAGER/EQUAL';
       case 6: return 'DIRECTOR/EQUAL';
       case 13: return 'SEVP/COMMISSIONER/EQUAL';
-      default: return 'STAFF/EQUAL';
+      default: return 'GENERAL MANAGER/EQUAL';
     }
   };
 
@@ -28,14 +32,26 @@ export function panjarLuarNegeriPrintTemplate(data: any) {
   const rincianList = dpRow?.dpRincian || [];
   
   const formatKategoriName = (kat: string) => {
-    if (!kat || kat.toLowerCase() === 'lain_lain' || kat.toLowerCase() === 'lain-lain') {
-      return 'OTHERS / BIAYA LAIN';
+    const k = kat ? kat.toLowerCase() : '';
+    switch (k) {
+      case 'saku': return 'UANG SAKU / POCKET MONEY';
+      case 'hotel': return 'AKOMODASI / HOTEL';
+      case 'laundry': return 'LAUNDRY';
+      case 'transport': return 'TRANSPORTASI / TRAVEL';
+      case 'meal': return 'UANG MAKAN / MEAL ALLOWANCE';
+      case 'lain_lain':
+      case 'lain-lain':
+      case 'others':
+        return 'LAIN-LAIN / OTHERS';
+      default:
+        return kat ? kat.replace(/_/g, ' ').toUpperCase() : 'LAIN-LAIN / OTHERS';
     }
-    return kat.toUpperCase();
   };
 
   const groupedRincian = rincianList.reduce((acc: any, curr: any) => {
-    const k = curr.kategori || 'lain_lain';
+    let k = curr.kategori || 'lain_lain';
+    k = k.toLowerCase();
+    if (k === 'lain-lain' || k === 'others') k = 'lain_lain';
     if (!acc[k]) acc[k] = [];
     acc[k].push(curr);
     return acc;
@@ -91,7 +107,7 @@ export function panjarLuarNegeriPrintTemplate(data: any) {
           <td></td>
           <td style="font-style: italic; padding-left: 20px; font-weight: bold;">${romanNumber}.${catIndex}</td>
           <td style="font-style: italic; font-weight: bold;" colspan="2">${formatKategoriName(kategori)}</td>
-          <td style="font-weight: bold;">: &nbsp; ${catTotalStr}</td>
+          <td></td>
         </tr>
         ${itemsHtml}
       `;
@@ -110,19 +126,21 @@ export function panjarLuarNegeriPrintTemplate(data: any) {
                 * { box-sizing: border-box; }
                 body {
                         font-family: Arial, Helvetica, sans-serif;
-                        font-size: 9.5px;
+                        font-size: 11px;
                         line-height: 1.6;
-                        color: black;
+                        color: #20242a;
                         margin: 0;
+                        padding-bottom: 30px;
                 }
                 @media screen {
                         body {
                                 margin: 40px auto;
                                 max-width: 210mm;
-                                padding: 8mm 8mm 30px;
+                                padding: 8mm 8mm 40px;
                                 background: white;
                                 box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
                                 border: 1px solid #ddd;
+                                position: relative;
                         }
                         html {
                                 background: #f3f4f6;
@@ -130,6 +148,12 @@ export function panjarLuarNegeriPrintTemplate(data: any) {
                         .no-print {
                                 max-width: 210mm;
                                 margin: 0 auto 10px;
+                        }
+                        .address-footer {
+                                position: absolute;
+                                bottom: 15px;
+                                left: 15mm;
+                                right: 15mm;
                         }
                 }
                 table { border-collapse: collapse; table-layout: fixed; }
@@ -144,7 +168,7 @@ export function panjarLuarNegeriPrintTemplate(data: any) {
                 }
                 .header-table td, .header-table th {
                         border: 1px solid #000;
-                        padding: 4px 6px;
+                        padding: 2px;
                         vertical-align: middle;
                         box-sizing: border-box;
                 }
@@ -218,7 +242,7 @@ export function panjarLuarNegeriPrintTemplate(data: any) {
                 }
                 .content-table td {
                         border: 1px solid black;
-                        padding: 6px 6px;
+                        padding: 2px 6px;
                         vertical-align: middle;
                 }
                 .biaya-table {
@@ -235,39 +259,64 @@ export function panjarLuarNegeriPrintTemplate(data: any) {
                         font-weight: bold;
                         text-align: center;
                 }
-                .footer-table {
+                .address-footer {
+                        position: fixed;
+                        left: 8mm;
+                        right: 8mm;
+                        bottom: 0;
+                        padding: 0 10px 2px;
+                        font-family: "Times New Roman", Times, serif;
+                        font-size: 9.5px;
+                        line-height: 1.15;
+                        color: #555;
+                }
+                .address-footer table {
                         width: 100%;
-                        margin-top: 12px;
-                        page-break-inside: avoid;
+                        border: none;
                 }
-                .footer-table td {
+                .address-footer td {
+                        border: none;
+                        vertical-align: bottom;
+                }
+                .address-footer .orange {
+                        color: #c2410c;
+                        font-weight: bold;
+                        margin-bottom: 2px;
+                }
+                .address-footer .center {
                         text-align: center;
-                        vertical-align: top;
-                        width: 33.33%;
+                        color: #c2410c;
+                        font-weight: bold;
+                        padding-bottom: 4px;
                 }
-                .personalia-qr-box {
-                        height: 55px;
+                .address-footer .right {
+                        text-align: right;
+                }
+                .sign-row {
+                        text-align: right;
+                        margin-top: 4px;
+                        padding-right: 40px;
+                        font-size: 11px;
+                }
+                .personalia-qr-wrap {
                         display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        margin: 2px 0;
+                        justify-content: flex-end;
+                        padding-right: 84px;
+                        margin-top: 10px;
                 }
-                .personalia-qr {
+                .personalia-qr,
+                .personalia-qr-placeholder {
                         width: 50px;
                         height: 50px;
                         object-fit: contain;
                 }
                 .personalia-qr-placeholder {
-                        font-family: Arial, Helvetica, sans-serif;
-                        width: 50px;
-                        height: 50px;
-                        border: 1px dashed #666;
+                        border: 1px dashed #777;
                         display: flex;
                         align-items: center;
                         justify-content: center;
                         color: #777;
-                        font-size: 9px;
-                        line-height: 1;
+                        font-size: 10px;
                         font-weight: 800;
                 }
                 .underline {
@@ -285,165 +334,167 @@ export function panjarLuarNegeriPrintTemplate(data: any) {
 <body>
         <div class="no-print"><button onclick="window.print()">Cetak / Simpan PDF</button></div>
 
-        <!-- Header Table -->
-        <table class="header-table">
-                <thead>
-                        <tr class="text-center">
-                                <td class="logo-cell" rowspan="4">
-                                        <img src="${LOGO_SRC}" alt="Logo INL" class="logo-img" width="83">
-                                </td>
-                                <td class="company-cell" rowspan="3">
-                                        <div class="company-title">PT. Industri Nabati Lestari</div>
-                                        <div class="company-subtitle">Pabrik Minyak Goreng</div>
-                                        <div class="company-address">
-                                                Komp. KEK Sei Mangkei, Kav. 2-3, Kec. Bosar Maligas, Kab. Simalungun, Sumatera Utara, 21184
-                                        </div>
-                                </td>
-                                <th class="meta-title-cell">No. Dokumen</th>
-                                <th class="meta-title-cell">Tgl. Berlaku</th>
-                        </tr>
-                        <tr class="text-center">
-                                <td class="meta-value-cell">INLHO/BSIS-GEA/F-014</td>
-                                <td class="meta-value-cell">21-Mar-22</td>
-                        </tr>
-                        <tr class="text-center">
-                                <th class="meta-title-cell">No. Revisi</th>
-                                <th class="meta-title-cell">Halaman</th>
-                        </tr>
-                        <tr class="text-center">
-                                <th class="doc-title-cell">DETAIL OF DOWN PAYMENT (DP) ABROAD</th>
-                                <td class="meta-value-cell">01</td>
-                                <td class="meta-value-cell">1 dari 1</td>
-                        </tr>
-                </thead>
-        </table>
+        <div class="print-page">
+                <!-- Header Table -->
+                <table class="header-table">
+                        <thead>
+                                <tr class="text-center">
+                                        <td class="logo-cell" rowspan="4">
+                                                <img src="${LOGO_SRC}" alt="Logo INL" class="logo-img" width="83">
+                                        </td>
+                                        <td class="company-cell" rowspan="3">
+                                                <div class="company-title">PT. Industri Nabati Lestari</div>
+                                                <div class="company-subtitle">Pabrik Minyak Goreng</div>
+                                                <div class="company-address">
+                                                        Komp. KEK Sei Mangkei, Kav. 2-3, Kec. Bosar Maligas, Kab. Simalungun, Sumatera Utara, 21184
+                                                </div>
+                                        </td>
+                                        <th class="meta-title-cell">No. Dokumen</th>
+                                        <th class="meta-title-cell">Tgl. Berlaku</th>
+                                </tr>
+                                <tr class="text-center">
+                                        <td class="meta-value-cell">INLHO/BSIS-GEA/F-014</td>
+                                        <td class="meta-value-cell">21-Mar-22</td>
+                                </tr>
+                                <tr class="text-center">
+                                        <th class="meta-title-cell">No. Revisi</th>
+                                        <th class="meta-title-cell">Halaman</th>
+                                </tr>
+                                <tr class="text-center">
+                                        <th class="doc-title-cell">DETAIL OF DOWN PAYMENT (DP) ABROAD</th>
+                                        <td class="meta-value-cell">01</td>
+                                        <td class="meta-value-cell">1 dari 1</td>
+                                </tr>
+                        </thead>
+                </table>
 
-        <!-- Content Table -->
-        <table class="content-table">
-                <colgroup>
-                        <col style="width: 5%;">
-                        <col style="width: 5%;">
-                        <col style="width: 5%;">
-                        <col style="width: 30%;">
-                        <col style="width: 55%;">
-                </colgroup>
-                <tr>
-                        <td align="center">${nextRoman()}</td>
-                        <td class="bold" style="font-style: italic;" colspan="3">SPJ/BTO NUMBER</td>
-                        <td>: &nbsp; ${esc(btoRow.nomorBto || 'SURAT BELUM DITERBITKAN')}</td>
-                </tr>
-                <tr>
-                        <td align="center">${nextRoman()}</td>
-                        <td class="bold" style="font-style: italic;" colspan="3">NAME</td>
-                        <td>: &nbsp; ${esc((btoRow.employeeNama || owner?.nama || '').toUpperCase())}</td>
-                </tr>
-                <tr>
-                        <td align="center">${nextRoman()}</td>
-                        <td class="bold" style="font-style: italic;" colspan="3">POSITION</td>
-                        <td>: &nbsp; ${esc((owner?.jabatan || '').toUpperCase())}</td>
-                </tr>
-                <tr>
-                        <td align="center">${nextRoman()}</td>
-                        <td class="bold" style="font-style: italic;" colspan="3">JOB LEVEL</td>
-                        <td>: &nbsp; ${jobLevelName(owner?.gradeLevel)}</td>
-                </tr>
-                <tr>
-                        <td align="center">${nextRoman()}</td>
-                        <td class="bold" style="font-style: italic;" colspan="3">DESTINATION</td>
-                        <td>: &nbsp; ${esc(btoRow.tujuanNama).toUpperCase()}</td>
-                </tr>
-                <tr>
-                        <td align="center">${nextRoman()}</td>
-                        <td class="bold" style="font-style: italic;" colspan="3">NECESSARY</td>
-                        <td>: &nbsp; ${esc(btoRow.kepentingan).toUpperCase()}</td>
-                </tr>
-                <tr>
-                        <td align="center">${nextRoman()}</td>
-                        <td class="bold" style="font-style: italic;" colspan="3">TOTAL DAYS</td>
-                        <td>: &nbsp; ${durationDays(btoRow.estBerangkat, btoRow.estKembali)} HARI</td>
-                </tr>
-                <tr>
-                        <td align="center">${nextRoman()}</td>
-                        <td class="bold" style="font-style: italic;" colspan="4">PERIODE</td>
-                </tr>
-                <tr>
-                        <td></td>
-                        <td style="font-style: italic; padding-left: 20px;" colspan="2">${currentRoman}.1</td>
-                        <td style="font-style: italic;">START</td>
-                        <td>: &nbsp; ${dateText(btoRow.estBerangkat).toUpperCase()}</td>
-                </tr>
-                <tr>
-                        <td></td>
-                        <td style="font-style: italic; padding-left: 20px;" colspan="2">${currentRoman}.2</td>
-                        <td style="font-style: italic;">END</td>
-                        <td>: &nbsp; ${dateText(btoRow.estKembali).toUpperCase()}</td>
-                </tr>
-                <tr>
-                        <td align="center">${nextRoman()}</td>
-                        <td class="bold" style="font-style: italic;" colspan="4">DESCRIPTION OF SCHEDULE</td>
-                </tr>
-                <tr>
-                        <td></td>
-                        <td style="font-style: italic; padding-left: 20px;" colspan="2">${currentRoman}.1</td>
-                        <td style="font-style: italic;">DEPARTURE DATE</td>
-                        <td>: &nbsp; ${dateText(btoRow.estBerangkat).toUpperCase()}</td>
-                </tr>
-                <tr>
-                        <td></td>
-                        <td style="font-style: italic; padding-left: 20px;" colspan="2">${currentRoman}.2</td>
-                        <td style="font-style: italic;">DEPARTURE TIME</td>
-                        <td>: &nbsp; ${departureTime}</td>
-                </tr>
-                <tr>
-                        <td></td>
-                        <td style="font-style: italic; padding-left: 20px;" colspan="2">${currentRoman}.3</td>
-                        <td style="font-style: italic;">ARRIVAL DATE</td>
-                        <td>: &nbsp; ${dateText(btoRow.estKembali).toUpperCase()}</td>
-                </tr>
-                <tr>
-                        <td></td>
-                        <td style="font-style: italic; padding-left: 20px;" colspan="2">${currentRoman}.4</td>
-                        <td style="font-style: italic;">ARRIVAL TIME</td>
-                        <td>: &nbsp; ${arrivalTime}</td>
-                </tr>
-                <tr>
-                        <td align="center">${nextRoman()}</td>
-                        <td class="bold" style="font-style: italic;" colspan="4">DETAIL OF DOWN PAYMENT</td>
-                </tr>
-                ${getDynamicDetailHtml(currentRoman)}
-                <tr class="bold">
-                        <td></td>
-                        <td style="font-style: italic; padding-left: 20px;" colspan="3">TOTAL DOWN PAYMENT</td>
-                        <td>: &nbsp; ${dpRow ? formatCatVal({ idr: Number(dpRow.totalIdr || 0), usd: Number(dpRow.totalUsd || 0) }) : '-'}</td>
-                </tr>
-        </table>
-
-        <!-- Footer Sign Personalia / Reviewer -->
-        <table class="footer-table" border="0" cellspacing="0" cellpadding="0" style="margin-top: 20px;">
-                <tr>
-                        <td width="60%"></td>
-                        <td align="center" style="font-size: 11px;">
-                                <p style="margin-bottom: 5px;"><b>Reviewed & Approved by Finance:</b></p>
-                                ${financeQr ? `
-                                <img src="${financeQr}" style="width: 65px; height: 65px; object-fit: contain; margin-bottom: 5px;" />
-                                ` : `
-                                <div style="height: 65px; border: 1px dashed #777; width: 65px; margin-bottom: 5px; display: flex; align-items: center; justify-content: center; color: #777; font-size: 9px; font-weight: 800;">QR</div>
-                                `}
-                                <p style="margin-top: 5px;"><strong>${esc(logs.find((l: any) => l.aksi === 'approve')?.actorNama || 'GA Administrator')}</strong></p>
-                        </td>
-                </tr>
-        </table>
+                <!-- Content Table -->
+                <table class="content-table">
+                        <colgroup>
+                                <col style="width: 5%;">
+                                <col style="width: 7%;">
+                                <col style="width: 8%;">
+                                <col style="width: 25%;">
+                                <col style="width: 55%;">
+                        </colgroup>
+                        <tr>
+                                <td align="center">${nextRoman()}</td>
+                                <td class="bold" style="font-style: italic;" colspan="3">SPJ/BTO NUMBER</td>
+                                <td>: &nbsp; ${esc(btoRow.nomorBto || 'SURAT BELUM DITERBITKAN')}</td>
+                        </tr>
+                        <tr>
+                                <td align="center">${nextRoman()}</td>
+                                <td class="bold" style="font-style: italic;" colspan="3">NAME</td>
+                                <td>: &nbsp; ${esc((btoRow.employeeNama || owner?.nama || '').toUpperCase())}</td>
+                        </tr>
+                        <tr>
+                                <td align="center">${nextRoman()}</td>
+                                <td class="bold" style="font-style: italic;" colspan="3">POSITION</td>
+                                <td>: &nbsp; ${esc((owner?.jabatan || '').toUpperCase())}</td>
+                        </tr>
+                        <tr>
+                                <td align="center">${nextRoman()}</td>
+                                <td class="bold" style="font-style: italic;" colspan="3">JOB LEVEL</td>
+                                <td>: &nbsp; ${jobLevelName(owner?.gradeLevel)}</td>
+                        </tr>
+                        <tr>
+                                <td align="center">${nextRoman()}</td>
+                                <td class="bold" style="font-style: italic;" colspan="3">DESTINATION</td>
+                                <td>: &nbsp; ${esc(btoRow.tujuanNama).toUpperCase()}</td>
+                        </tr>
+                        <tr>
+                                <td align="center">${nextRoman()}</td>
+                                <td class="bold" style="font-style: italic;" colspan="3">NECESSARY</td>
+                                <td>: &nbsp; ${esc(btoRow.kepentingan).toUpperCase()}</td>
+                        </tr>
+                        <tr>
+                                <td align="center">${nextRoman()}</td>
+                                <td class="bold" style="font-style: italic;" colspan="3">TOTAL DAYS</td>
+                                <td>: &nbsp; ${durationDays(btoRow.estBerangkat, btoRow.estKembali)} HARI</td>
+                        </tr>
+                        <tr>
+                                <td align="center">${nextRoman()}</td>
+                                <td class="bold" style="font-style: italic;" colspan="4">PERIODE</td>
+                        </tr>
+                        <tr>
+                                <td></td>
+                                <td style="font-style: italic; padding-left: 20px;" colspan="2">${currentRoman}.1</td>
+                                <td style="font-style: italic;">START</td>
+                                <td>: &nbsp; ${dateText(btoRow.estBerangkat).toUpperCase()}</td>
+                        </tr>
+                        <tr>
+                                <td></td>
+                                <td style="font-style: italic; padding-left: 20px;" colspan="2">${currentRoman}.2</td>
+                                <td style="font-style: italic;">END</td>
+                                <td>: &nbsp; ${dateText(btoRow.estKembali).toUpperCase()}</td>
+                        </tr>
+                        <tr>
+                                <td align="center">${nextRoman()}</td>
+                                <td class="bold" style="font-style: italic;" colspan="4">DESCRIPTION OF SCHEDULE</td>
+                        </tr>
+                        <tr>
+                                <td></td>
+                                <td style="font-style: italic; padding-left: 20px;" colspan="2">${currentRoman}.1</td>
+                                <td style="font-style: italic;">DEPARTURE DATE</td>
+                                <td>: &nbsp; ${dateText(btoRow.estBerangkat).toUpperCase()}</td>
+                        </tr>
+                        <tr>
+                                <td></td>
+                                <td style="font-style: italic; padding-left: 20px;" colspan="2">${currentRoman}.2</td>
+                                <td style="font-style: italic;">DEPARTURE TIME</td>
+                                <td>: &nbsp; ${departureTime}</td>
+                        </tr>
+                        <tr>
+                                <td></td>
+                                <td style="font-style: italic; padding-left: 20px;" colspan="2">${currentRoman}.3</td>
+                                <td style="font-style: italic;">ARRIVAL DATE</td>
+                                <td>: &nbsp; ${dateText(btoRow.estKembali).toUpperCase()}</td>
+                        </tr>
+                        <tr>
+                                <td></td>
+                                <td style="font-style: italic; padding-left: 20px;" colspan="2">${currentRoman}.4</td>
+                                <td style="font-style: italic;">ARRIVAL TIME</td>
+                                <td>: &nbsp; ${arrivalTime}</td>
+                        </tr>
+                        <tr>
+                                <td align="center">${nextRoman()}</td>
+                                <td class="bold" style="font-style: italic;" colspan="4">DETAIL OF DOWN PAYMENT</td>
+                        </tr>
+                        ${getDynamicDetailHtml(currentRoman)}
+                        <tr class="bold">
+                                <td></td>
+                                <td style="font-style: italic; padding-left: 20px;" colspan="3">TOTAL DOWN PAYMENT</td>
+                                <td>: &nbsp; ${dpRow ? formatCatVal({ idr: Number(dpRow.totalIdr || 0), usd: Number(dpRow.totalUsd || 0) }) : '-'}</td>
+                        </tr>
+                </table>
+                <div class="personalia-qr-wrap">${financeQrMark}</div>
+                <div class="sign-row">Sign by Personalia: &nbsp;<strong><em>${esc(logs.find((l: any) => l.aksi === 'approve')?.actorNama || 'GA Administrator')}</em></strong></div>
+        </div>
 
         <!-- Factory Address Footer -->
-        <table class="address-footer" width="100%" border="0" cellspacing="0" cellpadding="0">
-                <tr>
-                        <td align="center" style="font-size: 8px; color: #555; line-height: 1.3;">
-                                <span style="color: #c2410c; font-weight: bold;">Factory & Main Office:</span> Special Economic Zone - Sei Mangkei, Jl. Kelapa Sawit II Kav. 2-3, Kec. Bosar Maligas, Kab. Simalungun 21184, North Sumatera - Indonesia. P: +62 622 7297 252. E: cs@inl.co.id
-                                <br>
-                                <span style="color: #c2410c; font-weight: bold;">Representative & Marketing Office:</span> Jl. Iskandar Muda No. 115, Medan 20119, North Sumatra - Indonesia. P: +62 61 4521 668. E: cs@inl.co.id &nbsp;|&nbsp; <span style="text-decoration: underline; color: #c2410c; font-weight: bold;">www.inl.co.id</span>
-                        </td>
-                </tr>
-        </table>
+        <div class="address-footer">
+                <table>
+                        <tr>
+                                <td>
+                                        <div class="orange">Factory &amp; Main Office:</div>
+                                        Special Economic Zone - Sei Mangkei<br>
+                                        Jl. Kelapa Sawit II Kav. 2-3<br>
+                                        Kec. Bosar Maligas, Simalungun 21184<br>
+                                        North Sumatera - Indonesia<br>
+                                        P: +62 622 7297 252 &nbsp; F: +62 622 7297 255<br>
+                                        E: cs@inl.co.id
+                                </td>
+                                <td class="center">www.inl.co.id</td>
+                                <td class="right">
+                                        <div class="orange">Representative &amp; Marketing Office:</div>
+                                        Jl. Iskandar Muda No. 115<br>
+                                        Medan 20119<br>
+                                        North Sumatra - Indonesia<br>
+                                        P: +62 61 4521 668
+                                </td>
+                        </tr>
+                </table>
+        </div>
         <script type="text/javascript">
           window.addEventListener('load', () => {
             setTimeout(() => {
