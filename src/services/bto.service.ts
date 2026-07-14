@@ -285,6 +285,7 @@ export async function submitBtoService(id: string, actor: { id: string; nama: st
       tanggal: new Date(existing.estBerangkat),
       jumlahHari,
       jumlahMalam,
+      allowUnconfiguredOrZeroLimit: true,
       rincian: dpRow.dpRincian.map((item) => ({
         rincianId: item.rincianId,
         rincianLabel: item.rincianLabel,

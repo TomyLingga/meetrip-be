@@ -155,6 +155,7 @@ export async function validateRincianAgainstPagu(params: {
   jumlahHari: number
   jumlahMalam: number
   rincian: RincianPaguInput[]
+  allowUnconfiguredOrZeroLimit?: boolean
 }) {
   const paguList = await kalkulasiPaguBto({
     gradeId: params.gradeId,
@@ -170,6 +171,7 @@ export async function validateRincianAgainstPagu(params: {
     const label = item.rincianLabel || 'Rincian biaya'
 
     if (!pagu) {
+      if (params.allowUnconfiguredOrZeroLimit) continue
       throw new AppError(`Pagu untuk '${label}' belum dikonfigurasi`, 400)
     }
     if (pagu.isUnlimited) continue
@@ -178,8 +180,14 @@ export async function validateRincianAgainstPagu(params: {
     // dengan pesan "melebihi pagu 0" yang membingungkan) — beri pesan konfigurasi
     // yang jelas agar admin melengkapi master pagu.
     if (!pagu.hasPagu) {
+      if (params.allowUnconfiguredOrZeroLimit) continue
       throw new AppError(`Pagu untuk '${label}' belum dikonfigurasi untuk grade/wilayah ini`, 400)
     }
+
+    // Nilai 0 adalah nilai awal master pagu, bukan plafon yang sengaja melarang
+    // pengajuan. Pada alur DP BTO, nominal kebutuhan tetap boleh diajukan agar
+    // dapat ditinjau pada tahap persetujuan berikutnya.
+    if (pagu.paguMax <= 0 && params.allowUnconfiguredOrZeroLimit) continue
 
     // The pagu ceiling (paguMax) is denominated in the pagu row's currency. Comparing a
     // USD submission against an IDR ceiling (or vice-versa) is meaningless and would let
