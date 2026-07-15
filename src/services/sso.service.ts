@@ -155,6 +155,7 @@ export async function loginSsoService(
     expiresIn: config.jwt.expiresIn,
     user: {
       id: portalUser.id,
+      employeeId: emp?.id ?? null,
       email: portalUser.email,
       role: meeTripRole,
       nama: emp?.namaLengkap ?? null,
