@@ -41,30 +41,10 @@ type SpdkLog = typeof spdkApprovalLog.$inferSelect
 type BteLog = typeof bteApprovalLog.$inferSelect
 type AttendStampRow = typeof attendStamp.$inferSelect
 
-let LOGO_SRC = ''
-let LOGO_RIGHT_SRC = ''
-// Logos are read from the tracked src/assets folder so they always ship with the
-// repo (previously they lived in the gitignored uploads/ and the disposable contoh/).
-let logoDir = path.join(process.cwd(), 'src', 'assets')
-if (!fs.existsSync(logoDir)) {
-  logoDir = path.join(__dirname, '..', 'assets')
-}
+import { LOGO_INL_BASE64, LOGO_INL_RIGHT_BASE64 } from '../assets/logoBase64'
 
-try {
-  const logoPath = path.join(logoDir, 'inl.png')
-  const logoBase64 = fs.readFileSync(logoPath).toString('base64')
-  LOGO_SRC = `data:image/png;base64,${logoBase64}`
-} catch (e) {
-  LOGO_SRC = ''
-}
-
-try {
-  const logoRightPath = path.join(logoDir, 'logo_INL_right.png')
-  const logoRightBase64 = fs.readFileSync(logoRightPath).toString('base64')
-  LOGO_RIGHT_SRC = `data:image/png;base64,${logoRightBase64}`
-} catch (e) {
-  LOGO_RIGHT_SRC = ''
-}
+let LOGO_SRC = LOGO_INL_BASE64
+let LOGO_RIGHT_SRC = LOGO_INL_RIGHT_BASE64
 
 const monthFormatter = new Intl.DateTimeFormat('id-ID', {
   day: 'numeric',
