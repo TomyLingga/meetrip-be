@@ -45,8 +45,13 @@ let LOGO_SRC = ''
 let LOGO_RIGHT_SRC = ''
 // Logos are read from the tracked src/assets folder so they always ship with the
 // repo (previously they lived in the gitignored uploads/ and the disposable contoh/).
+let logoDir = path.join(process.cwd(), 'src', 'assets')
+if (!fs.existsSync(logoDir)) {
+  logoDir = path.join(__dirname, '..', 'assets')
+}
+
 try {
-  const logoPath = path.join(process.cwd(), 'src', 'assets', 'inl.png')
+  const logoPath = path.join(logoDir, 'inl.png')
   const logoBase64 = fs.readFileSync(logoPath).toString('base64')
   LOGO_SRC = `data:image/png;base64,${logoBase64}`
 } catch (e) {
@@ -54,7 +59,7 @@ try {
 }
 
 try {
-  const logoRightPath = path.join(process.cwd(), 'src', 'assets', 'logo_INL_right.png')
+  const logoRightPath = path.join(logoDir, 'logo_INL_right.png')
   const logoRightBase64 = fs.readFileSync(logoRightPath).toString('base64')
   LOGO_RIGHT_SRC = `data:image/png;base64,${logoRightBase64}`
 } catch (e) {
@@ -312,7 +317,7 @@ async function renderBto(btoRow: BtoRow, owner: any, logs: BtoLog[]) {
     ? (pickLog(logs, (log) => log.tahap === 'sdm' && log.aksi === 'approve') || pickLog(logs, (log) => log.tahap === 'admin_dp' && log.aksi === 'approve'))
     : null
   const ptLog = pickLog(logs, (log) => log.tahap === 'pemberi_tugas' && log.aksi === 'approve')
-  
+
   let ptRow = null
   if (btoRow.pemberiTugasId) {
     const cachedByPortal = await db.select().from(localUserCache).where(eq(localUserCache.portalUserId, btoRow.pemberiTugasId)).limit(1)
@@ -329,7 +334,7 @@ async function renderBto(btoRow: BtoRow, owner: any, logs: BtoLog[]) {
       }
     }
   }
-  
+
   const sdmName = sdmLog ? sdmLog.actorNama : ''
 
   // Generate QR Codes
@@ -360,7 +365,7 @@ async function renderSpdk(
 ) {
   const isApproved = logs.some((log) => log.aksi === 'approve')
   const kabagLog = pickLog(logs, (log) => log.aksi === 'approve')
-  
+
   let kabagNama = spdkRow.approverKabagNama
   let kabagPosition = 'Kabag SDM & Sistem'
 
@@ -606,13 +611,13 @@ async function assertDocumentAccess(btoRow: BtoRow, user: any, passedSpdkRow?: t
   }
 
   if (userIds.has(btoRow.employeeId) || userIds.has(btoRow.pemberiTugasId ?? '')) return
-  
+
   let spdkRow = passedSpdkRow;
   if (spdkRow === undefined) {
     const [row] = await db.select().from(spdkTable).where(eq(spdkTable.btoId, btoRow.id)).limit(1)
     spdkRow = row
   }
-  
+
   if (spdkRow && userIds.has(spdkRow.approverKabagId ?? '')) return
 
   // 1. Dynamic check for resolved Kabag
@@ -651,7 +656,7 @@ async function assertDocumentAccess(btoRow: BtoRow, user: any, passedSpdkRow?: t
         const cache = await db.query.localUserCache.findFirst({
           where: eq(localUserCache.employeeId, atasanId),
         })
-        
+
         if (userIds.has(atasanId) || (cache?.portalUserId && userIds.has(cache.portalUserId))) {
           return // Supervisor/Kabag/Kasi in hierarchy chain authorized!
         }
@@ -724,7 +729,7 @@ async function assertDocumentAccess(btoRow: BtoRow, user: any, passedSpdkRow?: t
     const cfg = await ensureApproverSpdkConfig()
     const resolvedKabag = await resolveSpdkApproverKabag(btoRow, cfg)
     debugInfo.resolvedKabagId = resolvedKabag.id
-  } catch (e) {}
+  } catch (e) { }
 
   // Log the resolution context server-side for debugging, but never leak internal
   // ids (userIds/employeeId/pemberiTugasId/kabag) to the client.
@@ -765,7 +770,7 @@ export default async function documentRoutes(fastify: FastifyInstance) {
       const isOwner = String((req.user as any).employeeId) === String(btoRow.employeeId)
       if (isAdminOrReviewer || isPemberiTugas || isOwner) {
         const parts = (btoRow.nomorBto ?? '').split('/').map((part) => part.trim()).filter(Boolean)
-        const nomorSpdk = parts.length >= 5 
+        const nomorSpdk = parts.length >= 5
           ? `${parts[0]}/${parts[1]}/SPDK/${parts[3]}/${parts[4]}`
           : (btoRow.nomorBto ?? '').replace(/\/BTO\//i, '/SPDK/')
         spdkRow = {
@@ -793,8 +798,8 @@ export default async function documentRoutes(fastify: FastifyInstance) {
     const logs = spdkRow.id === 'preview'
       ? []
       : await db.select().from(spdkApprovalLog)
-          .where(eq(spdkApprovalLog.spdkId, spdkRow.id))
-          .orderBy(desc(spdkApprovalLog.createdAt))
+        .where(eq(spdkApprovalLog.spdkId, spdkRow.id))
+        .orderBy(desc(spdkApprovalLog.createdAt))
     const [stamp] = await db.select().from(attendStamp)
       .where(eq(attendStamp.btoId, btoId))
       .orderBy(desc(attendStamp.stamped_at))
@@ -814,7 +819,7 @@ export default async function documentRoutes(fastify: FastifyInstance) {
       const isOwner = String((req.user as any).employeeId) === String(btoRow.employeeId)
       if (isAdminOrReviewer || isPemberiTugas || isOwner) {
         const parts = (btoRow.nomorBto ?? '').split('/').map((part) => part.trim()).filter(Boolean)
-        const nomorSpdk = parts.length >= 5 
+        const nomorSpdk = parts.length >= 5
           ? `${parts[0]}/${parts[1]}/SPDK/${parts[3]}/${parts[4]}`
           : (btoRow.nomorBto ?? '').replace(/\/BTO\//i, '/SPDK/')
         spdkRow = {
@@ -842,8 +847,8 @@ export default async function documentRoutes(fastify: FastifyInstance) {
     const logs = spdkRow.id === 'preview'
       ? []
       : await db.select().from(spdkApprovalLog)
-          .where(eq(spdkApprovalLog.spdkId, spdkRow.id))
-          .orderBy(desc(spdkApprovalLog.createdAt))
+        .where(eq(spdkApprovalLog.spdkId, spdkRow.id))
+        .orderBy(desc(spdkApprovalLog.createdAt))
     const [stamp] = await db.select().from(attendStamp)
       .where(eq(attendStamp.btoId, btoId))
       .orderBy(desc(attendStamp.stamped_at))
