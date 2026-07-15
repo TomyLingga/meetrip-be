@@ -131,6 +131,7 @@ export async function createOrUpdateBteService(
       nilaiUsd: Number(item.nilaiUsd ?? 0),
       useDollar: item.useDollar,
     })),
+    isSoftLimit: true,
   });
 
   // If any rincian or biaya lain is in USD, a real positive exchange rate is mandatory —
@@ -147,12 +148,6 @@ export async function createOrUpdateBteService(
 
   // Calculate totals from rincian
   data.rincian.forEach((r) => {
-    // Validate value against pagu
-    if (r.paguSaatInput && !r.isUnlimited) {
-      if (Number(r.nilaiTotal) > Number(r.paguSaatInput)) {
-        throw new AppError(`Pengajuan biaya '${r.rincianLabel}' sebesar ${r.nilaiTotal} melebihi pagu sebesar ${r.paguSaatInput}`, 400);
-      }
-    }
 
     if (r.useDollar) {
       const valUsd = Number(r.nilaiUsd || r.nilaiTotal);

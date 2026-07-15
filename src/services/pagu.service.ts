@@ -156,6 +156,7 @@ export async function validateRincianAgainstPagu(params: {
   jumlahMalam: number
   rincian: RincianPaguInput[]
   allowUnconfiguredOrZeroLimit?: boolean
+  isSoftLimit?: boolean
 }) {
   const paguList = await kalkulasiPaguBto({
     gradeId: params.gradeId,
@@ -205,7 +206,7 @@ export async function validateRincianAgainstPagu(params: {
       ? Number(item.nilaiUsd ?? item.nilaiTotal)
       : Number(item.nilaiTotal)
 
-    if (nilaiDiajukan > pagu.paguMax) {
+    if (nilaiDiajukan > pagu.paguMax && !params.isSoftLimit) {
       throw new AppError(
         `Pengajuan biaya '${label}' sebesar ${nilaiDiajukan} melebihi pagu sebesar ${pagu.paguMax}`,
         400,

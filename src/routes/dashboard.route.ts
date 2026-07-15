@@ -22,49 +22,6 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
     const analyticsMonth = query.month ?? now.getMonth() + 1;
     const analyticsStart = new Date(analyticsYear, analyticsMonth - 1, 1);
     const analyticsEnd = new Date(analyticsYear, analyticsMonth, 1);
-    // 1. Karyawan yang sedang dinas (BTO status = ACTIVE atau ATTENDED)
-    const [activeTripsRow] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(bto)
-      .where(and(
-        gte(bto.estKembali, new Date()),
-        sql`status IN ('ACTIVE', 'ATTENDED')`
-      ));
-
-    // 2. Pending BTO approvals (BTO status = ADMIN_DP_REVIEW atau PT_REVIEW atau SDM_REVIEW)
-    const [pendingBtoRow] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(bto)
-      .where(sql`status IN ('ADMIN_DP_REVIEW', 'PT_REVIEW', 'SDM_REVIEW')`);
-
-    // 3. Pending BTE approvals (BTE status = ADMIN_REVIEW, with legacy SUBMITTED support)
-    const [pendingBteRow] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(bte)
-      .where(sql`status IN ('ADMIN_REVIEW', 'SUBMITTED')`);
-
-    // 4. Menunggu pencairan BTE (BTE status = PENDING_PAYMENT)
-    const [pendingPaymentRow] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(bte)
-      .where(eq(bte.status, 'PENDING_PAYMENT'));
-
-    const [totalBtoRow] = await db.select({ count: sql<number>`count(*)` }).from(bto);
-    const [draftBtoRow] = await db.select({ count: sql<number>`count(*)` }).from(bto).where(sql`status IN ('DRAFT', 'REVISION_DP')`);
-    const [activeBtoRow] = await db.select({ count: sql<number>`count(*)` }).from(bto).where(sql`status IN ('ACTIVE', 'ATTENDED', 'REPORT_UPLOADED', 'BTE_DRAFT')`);
-    const [completedBtoRow] = await db.select({ count: sql<number>`count(*)` }).from(bto).where(eq(bto.status, 'COMPLETED'));
-
-    const [totalMeetingsRow] = await db.select({ count: sql<number>`count(*)` }).from(meeting);
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    const endOfToday = new Date();
-    endOfToday.setHours(23, 59, 59, 999);
-    const [meetingsTodayRow] = await db.select({ count: sql<number>`count(*)` }).from(meeting).where(and(
-      lte(meeting.mulai, endOfToday),
-      gte(meeting.selesai, startOfToday)
-    ));
-
-    // ─── Statistik personal (relevan untuk SEMUA role, karena semua orang bisa mengajukan dinas) ───
     const actorId = req.user.sub;
     const myDraftStatuses = ['DRAFT', 'REVISION_DP', 'REVISION_BTE'] as const;
     const myActiveStatuses = [
@@ -72,64 +29,70 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
       'ACTIVE', 'ATTENDED', 'REPORT_UPLOADED', 'BTE_DRAFT', 'ADMIN_BTE_REVIEW', 'BTE_PAYMENT',
     ] as const;
 
-    const [myDraftRow] = await db.select({ count: sql<number>`count(*)` }).from(bto)
-      .where(and(eq(bto.employeeId, actorId), inArray(bto.status, myDraftStatuses as any)));
-    const [myActiveRow] = await db.select({ count: sql<number>`count(*)` }).from(bto)
-      .where(and(eq(bto.employeeId, actorId), inArray(bto.status, myActiveStatuses as any)));
-    const [myCompletedRow] = await db.select({ count: sql<number>`count(*)` }).from(bto)
-      .where(and(eq(bto.employeeId, actorId), eq(bto.status, 'COMPLETED')));
-    const [myRejectedRow] = await db.select({ count: sql<number>`count(*)` }).from(bto)
-      .where(and(eq(bto.employeeId, actorId), eq(bto.status, 'REJECTED')));
-    const [myPemberiTugasRow] = await db.select({ count: sql<number>`count(*)` }).from(bto)
-      .where(eq(bto.pemberiTugasId, actorId));
-
     const startOfTodayForTrip = new Date();
     startOfTodayForTrip.setHours(0, 0, 0, 0);
-    const myUpcomingTrips = await db
-      .select({
-        id: bto.id,
-        nomorBto: bto.nomorBto,
-        tujuanNama: bto.tujuanNama,
-        estBerangkat: bto.estBerangkat,
-        estKembali: bto.estKembali,
-        status: bto.status,
-      })
-      .from(bto)
-      .where(and(
-        eq(bto.employeeId, actorId),
-        gte(bto.estKembali, startOfTodayForTrip),
-        inArray(bto.status, ['SUBMITTED', 'ADMIN_DP_REVIEW', 'PT_REVIEW', 'SDM_REVIEW', 'SPDK_DRAFT', 'KABAG_REVIEW', 'ACTIVE', 'ATTENDED'] as any),
-      ))
-      .orderBy(bto.estBerangkat)
-      .limit(5);
-
-    // ─── Perlu tindakan saya ─── (approval queue personal: SDM/Kabag/Pemberi Tugas/Admin sesuai role masing-masing)
-    const myApprovals = await listBtoApprovalsService({
-      id: actorId,
-      employeeId: req.user.employeeId,
-      role: req.user.role ?? 'user',
-      gradeLevel: req.user.gradeLevel,
-    }, false);
-    const myPendingApprovalsByStatus = myApprovals.reduce<Record<string, number>>((result, item) => {
-      result[item.status] = (result[item.status] ?? 0) + 1;
-      return result;
-    }, {});
-
-    const orgStatusRows = await db
-      .select({ status: bto.status, count: sql<number>`count(*)` })
-      .from(bto)
-      .groupBy(bto.status);
 
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5, 1);
     sixMonthsAgo.setHours(0, 0, 0, 0);
-    const monthlyRows = await db.execute(sql`
-      SELECT to_char(created_at AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM') AS month_key, COUNT(*) AS total
-      FROM bto
-      WHERE created_at >= ${sixMonthsAgo}
-      GROUP BY to_char(created_at AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM')
-      ORDER BY to_char(created_at AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM') ASC
-    `);
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    const [
+      [activeTripsRow],
+      [pendingBtoRow],
+      [pendingBteRow],
+      [pendingPaymentRow],
+      [totalBtoRow],
+      [draftBtoRow],
+      [activeBtoRow],
+      [completedBtoRow],
+      [totalMeetingsRow],
+      [meetingsTodayRow],
+      [myDraftRow],
+      [myActiveRow],
+      [myCompletedRow],
+      [myRejectedRow],
+      [myPemberiTugasRow],
+      myUpcomingTrips,
+      myApprovals,
+      orgStatusRows,
+      monthlyRows
+    ] = await Promise.all([
+      db.select({ count: sql<number>`count(*)` }).from(bto).where(and(gte(bto.estKembali, new Date()), sql`status IN ('ACTIVE', 'ATTENDED')`)),
+      db.select({ count: sql<number>`count(*)` }).from(bto).where(sql`status IN ('ADMIN_DP_REVIEW', 'PT_REVIEW', 'SDM_REVIEW')`),
+      db.select({ count: sql<number>`count(*)` }).from(bte).where(sql`status IN ('ADMIN_REVIEW', 'SUBMITTED')`),
+      db.select({ count: sql<number>`count(*)` }).from(bte).where(eq(bte.status, 'PENDING_PAYMENT')),
+      db.select({ count: sql<number>`count(*)` }).from(bto),
+      db.select({ count: sql<number>`count(*)` }).from(bto).where(sql`status IN ('DRAFT', 'REVISION_DP')`),
+      db.select({ count: sql<number>`count(*)` }).from(bto).where(sql`status IN ('ACTIVE', 'ATTENDED', 'REPORT_UPLOADED', 'BTE_DRAFT')`),
+      db.select({ count: sql<number>`count(*)` }).from(bto).where(eq(bto.status, 'COMPLETED')),
+      db.select({ count: sql<number>`count(*)` }).from(meeting),
+      db.select({ count: sql<number>`count(*)` }).from(meeting).where(and(lte(meeting.mulai, endOfToday), gte(meeting.selesai, startOfToday))),
+      db.select({ count: sql<number>`count(*)` }).from(bto).where(and(eq(bto.employeeId, actorId), inArray(bto.status, myDraftStatuses as any))),
+      db.select({ count: sql<number>`count(*)` }).from(bto).where(and(eq(bto.employeeId, actorId), inArray(bto.status, myActiveStatuses as any))),
+      db.select({ count: sql<number>`count(*)` }).from(bto).where(and(eq(bto.employeeId, actorId), eq(bto.status, 'COMPLETED'))),
+      db.select({ count: sql<number>`count(*)` }).from(bto).where(and(eq(bto.employeeId, actorId), eq(bto.status, 'REJECTED'))),
+      db.select({ count: sql<number>`count(*)` }).from(bto).where(eq(bto.pemberiTugasId, actorId)),
+      db.select({ id: bto.id, nomorBto: bto.nomorBto, tujuanNama: bto.tujuanNama, estBerangkat: bto.estBerangkat, estKembali: bto.estKembali, status: bto.status }).from(bto).where(and(eq(bto.employeeId, actorId), gte(bto.estKembali, startOfTodayForTrip), inArray(bto.status, ['SUBMITTED', 'ADMIN_DP_REVIEW', 'PT_REVIEW', 'SDM_REVIEW', 'SPDK_DRAFT', 'KABAG_REVIEW', 'ACTIVE', 'ATTENDED'] as any))).orderBy(bto.estBerangkat).limit(5),
+      listBtoApprovalsService({ id: actorId, employeeId: req.user.employeeId, role: req.user.role ?? 'user', gradeLevel: req.user.gradeLevel }, false),
+      db.select({ status: bto.status, count: sql<number>`count(*)` }).from(bto).groupBy(bto.status),
+      db.execute(sql`
+        SELECT to_char(created_at AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM') AS month_key, COUNT(*) AS total
+        FROM bto
+        WHERE created_at >= ${sixMonthsAgo}
+        GROUP BY to_char(created_at AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM')
+        ORDER BY to_char(created_at AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM') ASC
+      `)
+    ]);
+
+    const myPendingApprovalsByStatus = myApprovals.reduce<Record<string, number>>((result, item) => {
+      result[item.status] = (result[item.status] ?? 0) + 1;
+      return result;
+    }, {});
     const monthlyCount = new Map((monthlyRows.rows as Array<{ month_key: string; total: string | number }>).map((row) => [row.month_key, Number(row.total)]));
     const monthlyTripVolume = Array.from({ length: 6 }, (_, index) => {
       const date = new Date();
@@ -169,16 +132,18 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
     };
 
     // ─── Biaya personal (proyeksi & realisasi milik sendiri) ───
-    const myProyeksiResult = await db.execute(
-      sql`SELECT COALESCE(SUM(dp.total_idr), 0) AS total FROM dp
-          INNER JOIN bto ON dp.bto_id = bto.id
-          WHERE bto.employee_id = ${actorId} AND bto.status NOT IN ('COMPLETED', 'REJECTED')`
-    );
-    const myRealisasiResult = await db.execute(
-      sql`SELECT COALESCE(SUM(bte.total_idr), 0) AS total FROM bte
-          INNER JOIN bto ON bte.bto_id = bto.id
-          WHERE bto.employee_id = ${actorId} AND bte.status IN ('PENDING_PAYMENT', 'PAID')`
-    );
+    const [myProyeksiResult, myRealisasiResult] = await Promise.all([
+      db.execute(
+        sql`SELECT COALESCE(SUM(dp.total_idr), 0) AS total FROM dp
+            INNER JOIN bto ON dp.bto_id = bto.id
+            WHERE bto.employee_id = ${actorId} AND bto.status NOT IN ('COMPLETED', 'REJECTED')`
+      ),
+      db.execute(
+        sql`SELECT COALESCE(SUM(bte.total_idr), 0) AS total FROM bte
+            INNER JOIN bto ON bte.bto_id = bto.id
+            WHERE bto.employee_id = ${actorId} AND bte.status IN ('PENDING_PAYMENT', 'PAID')`
+      )
+    ]);
 
     return reply.send(ok({
       currentlyOnTrip: Number(activeTripsRow.count),
