@@ -166,6 +166,7 @@ export async function loginSsoService(
       gradeLevel: emp?.grade?.level ?? null,
       gradeKode: emp?.grade?.kode ?? null,
       unitNama: emp?.unit?.nama ?? null,
+      fotoPath: emp?.fotoProfil ?? null,
     },
   }
 }
