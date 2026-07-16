@@ -11,6 +11,7 @@ export interface JwtPayload {
   nama:       string | null
   gradeLevel: number | null
   role:       string
+  fotoPath:   string | null
 }
 
 // Augment @fastify/jwt — cara resmi agar request.user bertipe JwtPayload

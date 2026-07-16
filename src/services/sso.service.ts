@@ -21,6 +21,7 @@ interface PortalUser {
     jabatan?: string
     grade?: { kode: string; level: number }
     unit?: { id: string; nama: string }
+    fotoProfil?: string
     penempatanArea?: {
       id: string
       nama: string
@@ -110,6 +111,7 @@ export async function loginSsoService(
     penempatanLat: emp?.penempatanArea?.latitude ?? null,
     penempatanLng: emp?.penempatanArea?.longitude ?? null,
     penempatanProvinsi,
+    fotoPath: emp?.fotoProfil ?? null,
     lastSync: new Date(),
   }
 
@@ -137,6 +139,7 @@ export async function loginSsoService(
     nama: emp?.namaLengkap ?? null,
     gradeLevel: emp?.grade?.level ?? null,
     role: meeTripRole,
+    fotoPath: emp?.fotoProfil ?? null,
   }
 
   const accessToken = fastify.jwt.sign(payload, { expiresIn: config.jwt.expiresIn })
@@ -196,6 +199,7 @@ export async function refreshSsoTokenService(
     nama: userCache.nama,
     gradeLevel: userCache.gradeLevel,
     role: meeTripRole,
+    fotoPath: userCache.fotoPath,
   }
 
   const newAccessToken = fastify.jwt.sign(payload, { expiresIn: config.jwt.expiresIn })

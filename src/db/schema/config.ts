@@ -53,6 +53,7 @@ export const localUserCache = pgTable('local_user_cache', {
   penempatanLat:    varchar('penempatan_lat',     { length: 50  }),
   penempatanLng:    varchar('penempatan_lng',     { length: 50  }),
   penempatanProvinsi: varchar('penempatan_provinsi', { length: 100 }),
+  fotoPath:         varchar('foto_path', { length: 255 }), // URL foto profil dari SSO
   role:             varchar('role', { length: 50 }), // role di portal
   lastSync:         timestamp('last_sync', { withTimezone: true }).defaultNow(),
 })
