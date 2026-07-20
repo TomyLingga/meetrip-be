@@ -79,9 +79,14 @@ export async function createBtoService(
     negara: data.tujuanNegara,
     tujuanNama: data.tujuanNama,
   })
+  const ownerCache = await db.query.localUserCache.findFirst({
+    where: eq(localUserCache.portalUserId, employeeId),
+  })
   const [inserted] = await db.insert(bto).values({
     employeeId,
     employeeNama,
+    employeeUnitId: ownerCache?.unitId ?? null,
+    employeeUnitNama: ownerCache?.unitNama ?? null,
     ...data,
     tujuanLat:    String(data.tujuanLat),
     tujuanLng:    String(data.tujuanLng),

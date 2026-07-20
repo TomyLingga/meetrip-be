@@ -2,7 +2,7 @@
 import crypto from 'crypto'
 import {
   pgTable, uuid, varchar, integer, text,
-  boolean, numeric, timestamp, pgEnum,
+  boolean, numeric, timestamp, pgEnum, index,
 } from 'drizzle-orm/pg-core'
 import { refTransport } from './master'
 
@@ -42,6 +42,10 @@ export const bto = pgTable('bto', {
   // User yang mengajukan (portalUserId)
   employeeId:        varchar('employee_id', { length: 100 }).notNull(),
   employeeNama:      varchar('employee_nama', { length: 200 }),
+  // Snapshot penempatan organisasi ketika BTO dibuat. Laporan historis tidak
+  // ikut berubah jika karyawan dimutasi setelah perjalanan selesai.
+  employeeUnitId:    varchar('employee_unit_id', { length: 100 }),
+  employeeUnitNama:  varchar('employee_unit_nama', { length: 200 }),
   // Pemberi tugas (portalUserId / employeeId dari portal)
   pemberiTugasId:    varchar('pemberi_tugas_id',   { length: 100 }),
   pemberiTugasNama:  varchar('pemberi_tugas_nama',  { length: 200 }),
@@ -80,7 +84,13 @@ export const bto = pgTable('bto', {
   submittedAt:       timestamp('submitted_at',   { withTimezone: true }),
   createdAt:         timestamp('created_at',     { withTimezone: true }).defaultNow(),
   updatedAt:         timestamp('updated_at',     { withTimezone: true }).defaultNow(),
-})
+}, (table) => ({
+  employeeIdIdx: index('bto_employee_id_idx').on(table.employeeId),
+  pemberiTugasIdIdx: index('bto_pemberi_tugas_id_idx').on(table.pemberiTugasId),
+  employeeUnitIdIdx: index('bto_employee_unit_id_idx').on(table.employeeUnitId),
+  estBerangkatIdx: index('bto_est_berangkat_idx').on(table.estBerangkat),
+  statusIdx: index('bto_status_idx').on(table.status),
+}))
 
 // ─── bto_approval_log ────────────────────────────────────────────────────────
 // Audit trail setiap perubahan status BTO

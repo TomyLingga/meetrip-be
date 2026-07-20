@@ -8,8 +8,38 @@ import { ok } from '../utils/response';
 import { AppError } from '../utils/errorHandler';
 import { exportBtoExcelService } from '../services/export.service';
 import { listBtoApprovalsService } from '../services/bto.service';
+import { getDashboardAnalytics, getDashboardOverview } from '../services/dashboard.service';
 
 export default async function dashboardRoutes(fastify: FastifyInstance) {
+
+  fastify.get('/overview', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const query = z.object({
+      context: z.enum(['company', 'employee', 'assigner', 'kabag']).optional(),
+    }).parse(req.query);
+    const data = await getDashboardOverview({
+      id: req.user.sub,
+      employeeId: req.user.employeeId,
+      role: req.user.role,
+      nama: req.user.nama,
+    }, query.context);
+    return reply.send(ok(data));
+  });
+
+  fastify.get('/analytics-v2', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const now = new Date();
+    const query = z.object({
+      context: z.enum(['company', 'employee', 'assigner', 'kabag']).optional(),
+      year: z.coerce.number().int().min(2020).max(2100).default(now.getFullYear()),
+      month: z.coerce.number().int().min(1).max(12).default(now.getMonth() + 1),
+    }).parse(req.query);
+    const data = await getDashboardAnalytics({
+      id: req.user.sub,
+      employeeId: req.user.employeeId,
+      role: req.user.role,
+      nama: req.user.nama,
+    }, query.context, query.year, query.month);
+    return reply.send(ok(data));
+  });
 
   /** GET /api/dashboard/summary — Dashboard summary widgets */
   fastify.get('/summary', { preHandler: [fastify.authenticate] }, async (req, reply) => {

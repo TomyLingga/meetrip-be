@@ -2,7 +2,7 @@
 import crypto from 'crypto'
 import {
   pgTable, uuid, varchar, integer, text,
-  boolean, timestamp,
+  boolean, numeric, timestamp, uniqueIndex,
 } from 'drizzle-orm/pg-core'
 
 const genUUID = () => crypto.randomUUID()
@@ -77,4 +77,20 @@ export const meetripUserRole = pgTable('meetrip_user_role', {
   createdAt:    timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt:    timestamp('updated_at', { withTimezone: true }).defaultNow(),
 })
+
+// Anggaran perusahaan berbeda dari ref_pagu: anggaran adalah plafon belanja
+// organisasi per bulan, sedangkan pagu adalah batas hak biaya per karyawan.
+export const travelMonthlyBudget = pgTable('travel_monthly_budget', {
+  id:            uuid('id').primaryKey().$defaultFn(genUUID),
+  year:          integer('year').notNull(),
+  month:         integer('month').notNull(),
+  amountIdr:     numeric('amount_idr', { precision: 20, scale: 2 }).notNull().default('0'),
+  notes:         text('notes'),
+  updatedBy:     varchar('updated_by', { length: 100 }),
+  updatedByNama: varchar('updated_by_nama', { length: 200 }),
+  createdAt:     timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt:     timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  yearMonthUnique: uniqueIndex('travel_monthly_budget_year_month_unique').on(table.year, table.month),
+}))
 
