@@ -170,9 +170,22 @@ export default async function btoRoutes(fastify: FastifyInstance) {
 
   /** POST /api/bto — Buat BTO baru (DRAFT) */
   fastify.post('/', { preHandler: [fastify.authenticate] }, async (req, reply) => {
-    const data = btoCreateSchema.parse(req.body)
+    const data = btoCreateSchema.extend({ targetEmployeeId: z.string().optional() }).parse(req.body)
     const user = req.user
-    const result = await createBtoService(user.sub, user.nama, {
+    const isAdmin = (user.role ?? '').split(',').some(r => ['super_admin', 'admin'].includes(r))
+    
+    let targetId = user.sub;
+    let targetNama = user.nama;
+
+    if (isAdmin && data.targetEmployeeId) {
+      targetId = data.targetEmployeeId;
+      const targetUser = await db.query.localUserCache.findFirst({
+        where: eq(localUserCache.portalUserId, targetId)
+      });
+      targetNama = targetUser?.namaLengkap ?? "Karyawan Override";
+    }
+
+    const result = await createBtoService(targetId, targetNama, {
       ...data,
       estBerangkat: new Date(data.estBerangkat),
       estKembali: new Date(data.estKembali),
