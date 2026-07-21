@@ -182,7 +182,7 @@ export default async function btoRoutes(fastify: FastifyInstance) {
       const targetUser = await db.query.localUserCache.findFirst({
         where: eq(localUserCache.portalUserId, targetId)
       });
-      targetNama = targetUser?.namaLengkap ?? "Karyawan Override";
+      targetNama = targetUser?.nama ?? "Karyawan Override";
     }
 
     const result = await createBtoService(targetId, targetNama, {
