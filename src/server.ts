@@ -8,6 +8,7 @@ import fastifyStatic from '@fastify/static';
 import multipart from '@fastify/multipart';
 import { config } from './config/env';
 import { errorHandler } from './utils/errorHandler';
+import { expandDevelopmentLoopbackOrigins } from './utils/cors';
 
 import jwtPlugin from './plugins/jwt';
 import authPlugin from './plugins/auth';
@@ -46,7 +47,10 @@ async function bootstrap() {
   // CORS & Multi-part upload setup.
   // Restrict to configured browser origins (CORS_ORIGINS) since credentials are allowed.
   // Non-browser callers (no Origin header, e.g. server-to-server SSO, curl) are permitted.
-  const allowedOrigins = new Set(config.cors.origins);
+  const allowedOrigins = expandDevelopmentLoopbackOrigins(
+    config.cors.origins,
+    config.app.nodeEnv,
+  );
   await fastify.register(cors, {
     origin(origin, cb) {
       if (!origin || allowedOrigins.has(origin)) {

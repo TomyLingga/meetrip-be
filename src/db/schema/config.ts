@@ -45,6 +45,7 @@ export const localUserCache = pgTable('local_user_cache', {
   email:            varchar('email',            { length: 200 }).notNull(),
   nama:             varchar('nama',             { length: 200 }),
   gradeKode:        varchar('grade_kode',       { length: 20  }),
+  gradeLabel:       varchar('grade_label',      { length: 150 }),
   gradeLevel:       integer('grade_level'),
   unitId:           varchar('unit_id',          { length: 100 }),
   unitNama:         varchar('unit_nama',        { length: 200 }),

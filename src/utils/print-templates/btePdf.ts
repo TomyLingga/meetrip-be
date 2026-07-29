@@ -10,7 +10,8 @@ export function btePrintTemplate(
   money: (val: any, useDollar?: boolean) => string,
   bteRow: any,
   dpRow: any,
-  adminQr?: string | null
+  adminQr?: string | null,
+  tipeRincianMap: Record<string, string> = {}
 ) {
   const departureTime = btoRow.estBerangkat ? new Date(btoRow.estBerangkat).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', timeZone: 'Asia/Jakarta'}).replace('.', ':') : '07:00';
   const arrivalTime = btoRow.estKembali ? new Date(btoRow.estKembali).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', timeZone: 'Asia/Jakarta'}).replace('.', ':') : '23:00';
@@ -18,7 +19,11 @@ export function btePrintTemplate(
     ? `<img src="${adminQr}" class="personalia-qr" />`
     : `<div class="personalia-qr-placeholder">QR</div>`;
 
-  const jobLevelName = (level: number) => {
+  const jobLevelName = (ownerObj: any) => {
+    if (ownerObj?.gradeLabel) return String(ownerObj.gradeLabel).toUpperCase();
+    if (ownerObj?.gradeNama) return String(ownerObj.gradeNama).toUpperCase();
+    if (ownerObj?.gradeKode) return String(ownerObj.gradeKode).toUpperCase();
+    const level = typeof ownerObj === 'number' ? ownerObj : ownerObj?.gradeLevel;
     switch (level) {
       case 1: return 'JUNIOR STAFF/EQUAL';
       case 2: return 'STAFF/EQUAL';
@@ -27,32 +32,29 @@ export function btePrintTemplate(
       case 5: return 'GENERAL MANAGER/EQUAL';
       case 6: return 'DIRECTOR/EQUAL';
       case 13: return 'SEVP/COMMISSIONER/EQUAL';
-      default: return 'GENERAL MANAGER/EQUAL';
+      default: return 'STAFF/EQUAL';
     }
   };
 
   const rincianList = bteRow?.bteRincian || [];
+
   const formatKategoriName = (kat: string) => {
-    const k = kat ? kat.toLowerCase() : '';
-    switch (k) {
-      case 'saku': return 'POCKET MONEY / UANG SAKU';
-      case 'hotel': return 'HOTEL / ACCOMMODATION';
-      case 'laundry': return 'LAUNDRY';
-      case 'transport': return 'TRANSPORTATION / TICKET';
-      case 'meal': return 'MEAL ALLOWANCE / UANG MAKAN';
-      case 'lain_lain':
-      case 'lain-lain':
-      case 'others':
-        return 'OTHERS / BIAYA LAIN';
-      default:
-        return kat ? kat.replace(/_/g, ' ').toUpperCase() : 'OTHERS / BIAYA LAIN';
+    if (!kat) return 'ETC';
+    const k = kat.trim().toLowerCase();
+    if (k === 'etc' || k === 'lain_lain' || k === 'lain-lain' || k === 'others') {
+      return 'ETC';
     }
+    // Dynamic lookup from ref_tipe_rincian master table
+    if (tipeRincianMap[k]) {
+      return tipeRincianMap[k].toUpperCase();
+    }
+    return kat.replace(/_/g, ' ').toUpperCase();
   };
 
   const groupedRincian = rincianList.reduce((acc: any, curr: any) => {
-    let k = curr.kategori || 'lain_lain';
-    k = k.toLowerCase();
-    if (k === 'lain-lain' || k === 'others') k = 'lain_lain';
+    let k = curr.kategori || 'etc';
+    k = k.toLowerCase().trim();
+    if (k === 'lain-lain' || k === 'others' || k === 'lain_lain') k = 'etc';
     if (!acc[k]) acc[k] = [];
     acc[k].push(curr);
     return acc;
@@ -61,28 +63,27 @@ export function btePrintTemplate(
   let dynamicDetailHtml = '';
   let catIndex = 1;
   for (const [kategori, items] of Object.entries(groupedRincian)) {
-    let itemsHtml = '';
-    (items as any[]).forEach(item => {
-      const valStr = money(item.nilaiTotal, item.useDollar);
-      itemsHtml += `
-        <tr>
-          <td></td>
-          <td></td>
-          <td style="padding-left: 15px; font-weight: normal;">- ${esc(item.rincianLabel || '-')}</td>
-          <td class="money-cell" colspan="2">${valStr}</td>
-        </tr>
-      `;
-    });
-
+    // Category header row: Col 1 empty, X.1 in Col 2 (Category Number), Category Name in Col 3 (colspan=3)
     dynamicDetailHtml += `
       <tr>
         <td></td>
-        <td class="subno" style="font-weight: bold;">X.1.${catIndex}</td>
-        <td style="font-weight: bold;">${formatKategoriName(kategori)}</td>
-        <td colspan="2"></td>
+        <td class="subno section-label" style="text-align: center;">X.${catIndex}</td>
+        <td class="section-label" colspan="3">${formatKategoriName(kategori)}</td>
       </tr>
-      ${itemsHtml}
     `;
+    // Individual items: Col 1 empty, Col 2 empty, X.1.1 in Col 3 (Sub-item Number), Label in Col 4 (Expenditure), Value in Col 5
+    (items as any[]).forEach((item, idx) => {
+      const valStr = money(item.nilaiTotal, item.useDollar);
+      dynamicDetailHtml += `
+        <tr>
+          <td></td>
+          <td></td>
+          <td class="subno" style="text-align: center;">X.${catIndex}.${idx + 1}</td>
+          <td>${esc(item.rincianLabel || '-')}</td>
+          <td class="money-cell">${valStr}</td>
+        </tr>
+      `;
+    });
     catIndex++;
   }
 
@@ -90,12 +91,15 @@ export function btePrintTemplate(
   const bteTotal = Number(bteRow?.totalIdr || 0);
   const finalTotal = bteTotal - dpTotal;
 
+  // ETC section number comes after all categories
+  const etcSectionIndex = catIndex;
   const etcRows = (bteRow?.bteBiayaLain || []).map((item: any, idx: number) => `
                         <tr>
                                 <td></td>
-                                <td class="subno">X.2.${idx + 1}</td>
+                                <td></td>
+                                <td class="subno" style="text-align: center;">X.${etcSectionIndex}.${idx + 1}</td>
                                 <td>${esc(item.keterangan)}</td>
-                                <td class="money-cell" colspan="2">${money(item.nilai, item.useDollar)}</td>
+                                <td class="money-cell">${money(item.nilai, item.useDollar)}</td>
                         </tr>`).join('');
 
   return `
@@ -225,8 +229,7 @@ export function btePrintTemplate(
                 }
                 .content-table {
                         width: 100%;
-                        border: 1px solid #20242a;
-                        margin-top: 6px;
+                        border-collapse: collapse;
                         font-size: 9px;
                 }
                 .content-table td {
@@ -234,17 +237,27 @@ export function btePrintTemplate(
                         padding: 2px 4px;
                         vertical-align: middle;
                 }
-                .sizing-row td {
-                        height: 0 !important;
-                        padding: 0 !important;
-                        border: 0 !important;
-                        line-height: 0 !important;
-                        font-size: 0 !important;
+                .info-table {
+                        margin-top: 6px;
+                }
+                .expense-table {
+                        margin-top: -1px;
+                }
+                .expense-table tr:first-child td {
+                        border-top: none !important;
                 }
                 .roman { width: 4%; text-align: center; white-space: nowrap; }
-                .subno { width: 8%; text-align: center; white-space: nowrap; }
-                .label { width: 31%; font-weight: 800; font-style: italic; }
-                .expense { width: 52%; }
+                .subno { text-align: center; white-space: nowrap; }
+                .label { font-weight: 800; font-style: italic; }
+                .info-label {
+                        font-weight: 800;
+                        font-style: italic;
+                        border-right: none !important;
+                }
+                .info-value {
+                        border-left: none !important;
+                }
+                .expense { width: 46%; }
                 .amount { width: 36%; }
                 .money-cell {
                         text-align: right;
@@ -362,126 +375,132 @@ export function btePrintTemplate(
                         </thead>
                 </table>
 
-                <table class="content-table">
+                <!-- Table 1: General Info & Schedule (Rows I to IX) -->
+                <table class="content-table info-table">
                         <colgroup>
                                 <col style="width: 4%;">
-                                <col style="width: 8%;">
-                                <col style="width: 52%;">
-                                <col style="width: 18%;">
-                                <col style="width: 18%;">
+                                <col style="width: 6%;">
+                                <col style="width: 26%;">
+                                <col style="width: 64%;">
                         </colgroup>
-                        <tr class="sizing-row"><td></td><td></td><td></td><td></td><td></td></tr>
                         <tr>
                                 <td class="roman">I</td>
-                                <td class="label" colspan="2">SPDK/BTO NUMBER</td>
-                                <td colspan="2">: &nbsp; ${esc(btoRow.nomorBto || 'SURAT BELUM DITERBITKAN')}</td>
+                                <td class="info-label" colspan="2">SPDK/BTO NUMBER</td>
+                                <td class="info-value">: &nbsp; ${esc(btoRow.nomorBto || 'SURAT BELUM DITERBITKAN')}</td>
                         </tr>
                         <tr>
                                 <td class="roman">II</td>
-                                <td class="label" colspan="2">NAME</td>
-                                <td colspan="2">: &nbsp; ${esc((btoRow.employeeNama || owner?.nama || '').toUpperCase())}</td>
+                                <td class="info-label" colspan="2">NAME</td>
+                                <td class="info-value">: &nbsp; ${esc((btoRow.employeeNama || owner?.nama || '').toUpperCase())}</td>
                         </tr>
                         <tr>
                                 <td class="roman">III</td>
-                                <td class="label" colspan="2">POSITION</td>
-                                <td colspan="2">: &nbsp; ${esc((owner?.jabatan || owner?.gradeKode || '').toUpperCase())}</td>
+                                <td class="info-label" colspan="2">POSITION</td>
+                                <td class="info-value">: &nbsp; ${esc((owner?.jabatan || owner?.gradeKode || '').toUpperCase())}</td>
                         </tr>
                         <tr>
                                 <td class="roman">IV</td>
-                                <td class="label" colspan="2">JOB LEVEL</td>
-                                <td colspan="2">: &nbsp; ${jobLevelName(owner?.gradeLevel)}</td>
+                                <td class="info-label" colspan="2">JOB LEVEL</td>
+                                <td class="info-value">: &nbsp; ${jobLevelName(owner)}</td>
                         </tr>
                         <tr>
                                 <td class="roman">V</td>
-                                <td class="label" colspan="2">DESTINATION</td>
-                                <td colspan="2">: &nbsp; ${esc(btoRow.tujuanNama).toUpperCase()}</td>
+                                <td class="info-label" colspan="2">DESTINATION</td>
+                                <td class="info-value">: &nbsp; ${esc(btoRow.tujuanNama).toUpperCase()}</td>
                         </tr>
                         <tr>
                                 <td class="roman">VI</td>
-                                <td class="label" colspan="2">NECESSARY</td>
-                                <td colspan="2">: &nbsp; ${esc(btoRow.kepentingan).toUpperCase()}</td>
+                                <td class="info-label" colspan="2">NECESSARY</td>
+                                <td class="info-value">: &nbsp; ${esc(btoRow.kepentingan).toUpperCase()}</td>
                         </tr>
                         <tr>
                                 <td class="roman">VII</td>
-                                <td class="label" colspan="2">TOTAL DAYS</td>
-                                <td colspan="2">: &nbsp; ${durationDays(btoRow.estBerangkat, btoRow.estKembali)} HARI</td>
+                                <td class="info-label" colspan="2">TOTAL DAYS</td>
+                                <td class="info-value">: &nbsp; ${durationDays(btoRow.estBerangkat, btoRow.estKembali)} HARI</td>
                         </tr>
                         <tr>
                                 <td class="roman">VIII</td>
-                                <td class="label" colspan="4">PERIODE</td>
+                                <td class="label" colspan="3">PERIODE</td>
                         </tr>
                         <tr>
                                 <td></td>
                                 <td class="subno">VIII.1</td>
-                                <td class="label">START</td>
-                                <td colspan="2">: &nbsp; ${dateText(btoRow.estBerangkat).toUpperCase()}</td>
+                                <td class="info-label">START</td>
+                                <td class="info-value">: &nbsp; ${dateText(btoRow.estBerangkat).toUpperCase()}</td>
                         </tr>
                         <tr>
                                 <td></td>
                                 <td class="subno">VIII.2</td>
-                                <td class="label">END</td>
-                                <td colspan="2">: &nbsp; ${dateText(btoRow.estKembali).toUpperCase()}</td>
+                                <td class="info-label">END</td>
+                                <td class="info-value">: &nbsp; ${dateText(btoRow.estKembali).toUpperCase()}</td>
                         </tr>
                         <tr>
                                 <td class="roman">IX</td>
-                                <td class="label" colspan="4">DESCRIPTION OF SCHEDULE</td>
+                                <td class="label" colspan="3">DESCRIPTION OF SCHEDULE</td>
                         </tr>
                         <tr>
                                 <td></td>
                                 <td class="subno">IX.1</td>
-                                <td class="label">DEPARTURE DATE</td>
-                                <td colspan="2">: &nbsp; ${dateText(btoRow.estBerangkat).toUpperCase()}</td>
+                                <td class="info-label">DEPARTURE DATE</td>
+                                <td class="info-value">: &nbsp; ${dateText(btoRow.estBerangkat).toUpperCase()}</td>
                         </tr>
                         <tr>
                                 <td></td>
                                 <td class="subno">IX.2</td>
-                                <td class="label">DEPARTURE TIME</td>
-                                <td colspan="2">: &nbsp; ${departureTime}</td>
+                                <td class="info-label">DEPARTURE TIME</td>
+                                <td class="info-value">: &nbsp; ${departureTime}</td>
                         </tr>
                         <tr>
                                 <td></td>
                                 <td class="subno">IX.3</td>
-                                <td class="label">ARRIVAL DATE</td>
-                                <td colspan="2">: &nbsp; ${dateText(btoRow.estKembali).toUpperCase()}</td>
+                                <td class="info-label">ARRIVAL DATE</td>
+                                <td class="info-value">: &nbsp; ${dateText(btoRow.estKembali).toUpperCase()}</td>
                         </tr>
                         <tr>
                                 <td></td>
                                 <td class="subno">IX.4</td>
-                                <td class="label">ARRIVAL TIME</td>
-                                <td colspan="2">: &nbsp; ${arrivalTime}</td>
+                                <td class="info-label">ARRIVAL TIME</td>
+                                <td class="info-value">: &nbsp; ${arrivalTime}</td>
                         </tr>
+                </table>
+
+                <!-- Table 2: Detail of Travel Expenses (Section X) -->
+                <table class="content-table expense-table">
+                        <colgroup>
+                                <col style="width: 4%;">
+                                <col style="width: 6%;">
+                                <col style="width: 8%;">
+                                <col style="width: 46%;">
+                                <col style="width: 36%;">
+                        </colgroup>
                         <tr>
                                 <td class="roman">X</td>
                                 <td class="section-label" colspan="4">DETAIL OF TRAVEL EXPENSES</td>
                         </tr>
-                        <tr>
-                                <td></td>
-                                <td class="section-label" colspan="4">X.1 &nbsp; OUTSIDE OF THE REGION</td>
-                        </tr>
                         <tr class="bold text-center">
                                 <td></td>
-                                <td class="subno">Number</td>
+                                <td class="subno" colspan="2">Number</td>
                                 <td class="expense">Expenditure</td>
-                                <td class="amount" colspan="2">Total Price</td>
+                                <td class="amount">Total Price</td>
                         </tr>
                         ${dynamicDetailHtml}
                         <tr>
                                 <td></td>
-                                <td class="subno section-label">X.2</td>
+                                <td class="subno section-label" style="text-align: center;">X.${etcSectionIndex}</td>
                                 <td class="section-label" colspan="3">ETC</td>
                         </tr>
                         ${etcRows}
                         <tr class="bold">
-                                <td class="total-label" colspan="3">TOTAL EXPENSES</td>
-                                <td class="money-cell" colspan="2">${money(bteTotal)}</td>
+                                <td class="total-label" colspan="4">TOTAL EXPENSES</td>
+                                <td class="money-cell">${money(bteTotal)}</td>
                         </tr>
                         <tr>
-                                <td class="total-label" colspan="3">DOWN PAYMENT</td>
-                                <td class="money-cell" colspan="2">${money(dpTotal)}</td>
+                                <td class="total-label" colspan="4">DOWN PAYMENT</td>
+                                <td class="money-cell">${money(dpTotal)}</td>
                         </tr>
                         <tr class="bold">
-                                <td class="total-label" colspan="3">${finalTotal < 0 ? 'FINAL (OVERPAID / REFUND TO COMPANY)' : finalTotal > 0 ? 'FINAL (UNDERPAID / REIMBURSE TO EMPLOYEE)' : 'FINAL'}</td>
-                                <td class="money-cell bold" colspan="2">${money(finalTotal < 0 ? Math.abs(finalTotal) : finalTotal)}</td>
+                                <td class="total-label" colspan="4">${finalTotal < 0 ? 'FINAL (OVERPAID / REFUND TO COMPANY)' : finalTotal > 0 ? 'FINAL (UNDERPAID / REIMBURSE TO EMPLOYEE)' : 'FINAL'}</td>
+                                <td class="money-cell bold">${money(finalTotal < 0 ? Math.abs(finalTotal) : finalTotal)}</td>
                         </tr>
                 </table>
 

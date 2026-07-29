@@ -18,6 +18,7 @@ import {
   spdkApprovalLog,
   refTransport,
   refRincianBiaya,
+  refTipeRincian,
 } from '../db/schema'
 import { AppError } from '../utils/errorHandler'
 import { config } from '../config/env'
@@ -501,12 +502,34 @@ async function renderBte(btoRow: BtoRow, owner: any, bteRow: any, logs: BteLog[]
     dpRow = dpList[0] || null;
   }
 
+  // Update bteRincian with the latest kategori from ref_rincian_biaya
+  if (bteRow && Array.isArray(bteRow.bteRincian)) {
+    const allRefRincian = await db.select().from(refRincianBiaya);
+    const rincianMap = new Map(allRefRincian.map(r => [r.id, r]));
+    bteRow.bteRincian = bteRow.bteRincian.map((item: any) => {
+      const ref = rincianMap.get(item.rincianId);
+      return {
+        ...item,
+        kategori: ref?.kategori || item.kategori,
+      };
+    });
+  }
+
   // Generate QR for Admin/SDM approval of BTE
   const adminLog = pickLog(logs, (log) => log.aksi === 'approve')
   let adminQr = null
   if (adminLog && bteRow.status !== 'ADMIN_REVIEW') {
     const adminQrText = `Disetujui BTE: ${adminLog.actorNama}\nTanggal: ${dateTimeText(adminLog.createdAt)}`
     adminQr = await qrTextDataUrl(adminQrText)
+  }
+
+  // Load ref_tipe_rincian master data for dynamic category labels
+  const allTipeRincian = await db.select().from(refTipeRincian);
+  const tipeRincianMap: Record<string, string> = {};
+  for (const item of allTipeRincian) {
+    if (item.kode) {
+      tipeRincianMap[item.kode.toLowerCase().trim()] = item.label;
+    }
   }
 
   const spdkRow = await db.query.spdk.findFirst({ where: eq(spdkTable.btoId, btoRow.id) })
@@ -526,9 +549,10 @@ async function renderBte(btoRow: BtoRow, owner: any, bteRow: any, logs: BteLog[]
       durationDays,
       money,
       adminQr,
+      tipeRincianMap,
     })
   }
-  return btePrintTemplate(printBtoRow, owner, ptRow, logs, LOGO_SRC, esc, dateText, durationDays, money, bteRow, dpRow, adminQr)
+  return btePrintTemplate(printBtoRow, owner, ptRow, logs, LOGO_SRC, esc, dateText, durationDays, money, bteRow, dpRow, adminQr, tipeRincianMap)
 }
 
 async function loadBtoContext(btoId: string) {

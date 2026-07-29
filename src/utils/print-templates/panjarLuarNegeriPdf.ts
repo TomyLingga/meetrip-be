@@ -8,7 +8,11 @@ export function panjarLuarNegeriPrintTemplate(data: any) {
     ? `<img src="${financeQr}" class="personalia-qr" />`
     : `<div class="personalia-qr-placeholder">QR</div>`;
 
-  const jobLevelName = (level: number) => {
+  const jobLevelName = (ownerObj: any) => {
+    if (ownerObj?.gradeLabel) return String(ownerObj.gradeLabel).toUpperCase();
+    if (ownerObj?.gradeNama) return String(ownerObj.gradeNama).toUpperCase();
+    if (ownerObj?.gradeKode) return String(ownerObj.gradeKode).toUpperCase();
+    const level = typeof ownerObj === 'number' ? ownerObj : ownerObj?.gradeLevel;
     switch (level) {
       case 1: return 'JUNIOR STAFF/EQUAL';
       case 2: return 'STAFF/EQUAL';
@@ -17,7 +21,7 @@ export function panjarLuarNegeriPrintTemplate(data: any) {
       case 5: return 'GENERAL MANAGER/EQUAL';
       case 6: return 'DIRECTOR/EQUAL';
       case 13: return 'SEVP/COMMISSIONER/EQUAL';
-      default: return 'GENERAL MANAGER/EQUAL';
+      default: return 'STAFF/EQUAL';
     }
   };
 
@@ -395,7 +399,7 @@ export function panjarLuarNegeriPrintTemplate(data: any) {
                         <tr>
                                 <td align="center">${nextRoman()}</td>
                                 <td class="bold" style="font-style: italic;" colspan="3">JOB LEVEL</td>
-                                <td>: &nbsp; ${jobLevelName(owner?.gradeLevel)}</td>
+                                <td>: &nbsp; ${jobLevelName(owner)}</td>
                         </tr>
                         <tr>
                                 <td align="center">${nextRoman()}</td>

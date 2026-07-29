@@ -19,7 +19,7 @@ interface PortalUser {
     id: string
     namaLengkap: string
     jabatan?: string
-    grade?: { kode: string; level: number }
+    grade?: { kode: string; label?: string; level: number }
     unit?: { id: string; nama: string }
     fotoProfil?: string
     penempatanArea?: {
@@ -103,6 +103,7 @@ export async function loginSsoService(
     nama: emp?.namaLengkap ?? null,
     employeeId: emp?.id ?? null,
     gradeKode: emp?.grade?.kode ?? null,
+    gradeLabel: emp?.grade?.label ?? null,
     gradeLevel: emp?.grade?.level ?? null,
     unitId: emp?.unit?.id ?? null,
     unitNama: emp?.unit?.nama ?? null,
