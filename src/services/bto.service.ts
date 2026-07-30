@@ -162,10 +162,10 @@ export async function deleteBtoService(id: string, employeeId: string, isAdmin: 
 }
 
 // ─── Batalkan BTO oleh Pembuat (Cancel) ───────────────────────────────────────
-export async function cancelBtoService(id: string, actor: { id: string; nama: string }, catatan: string) {
+export async function cancelBtoService(id: string, actor: { id: string; nama: string; isAdmin?: boolean }, catatan: string) {
   const [existing] = await db.select().from(bto).where(eq(bto.id, id)).limit(1)
   if (!existing) throw new AppError('BTO tidak ditemukan', 404)
-  if (existing.employeeId !== actor.id) throw new AppError('Tidak diizinkan membatalkan BTO ini', 403)
+  if (!actor.isAdmin && existing.employeeId !== actor.id) throw new AppError('Tidak diizinkan membatalkan BTO ini', 403)
 
   const allowedStatuses = ['DRAFT', 'SUBMITTED', 'ADMIN_DP_REVIEW', 'REVISION_DP', 'PT_REVIEW', 'SDM_REVIEW'];
   if (!allowedStatuses.includes(existing.status)) {
@@ -215,10 +215,10 @@ export async function cancelBtoService(id: string, actor: { id: string; nama: st
 }
 
 // ─── Submit BTO ───────────────────────────────────────────────────────────────
-export async function submitBtoService(id: string, actor: { id: string; nama: string; gradeLevel?: number | null }) {
+export async function submitBtoService(id: string, actor: { id: string; nama: string; gradeLevel?: number | null; isAdmin?: boolean }) {
   const [existing] = await db.select().from(bto).where(eq(bto.id, id)).limit(1)
   if (!existing) throw new AppError('BTO tidak ditemukan', 404)
-  if (existing.employeeId !== actor.id) throw new AppError('Bukan milik Anda', 403)
+  if (!actor.isAdmin && existing.employeeId !== actor.id) throw new AppError('Bukan milik Anda', 403)
   if (existing.status !== 'DRAFT' && existing.status !== 'REVISION_DP') {
     throw new AppError(`Tidak bisa submit dari status ${existing.status}`, 400)
   }

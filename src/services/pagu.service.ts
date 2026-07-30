@@ -180,19 +180,8 @@ export async function validateRincianAgainstPagu(params: {
     // hasPagu=false & paguMax=0. Jangan bandingkan ke plafon 0 (menolak semua nilai
     // dengan pesan "melebihi pagu 0" yang membingungkan) — beri pesan konfigurasi
     // yang jelas agar admin melengkapi master pagu.
-    if (!pagu.hasPagu) {
-      if (params.allowUnconfiguredOrZeroLimit) continue
-      throw new AppError(`Pagu untuk '${label}' belum dikonfigurasi untuk grade/wilayah ini`, 400)
-    }
+    const maxAllowed = (!pagu || !pagu.hasPagu || pagu.paguMax <= 0) ? 0 : pagu.paguMax
 
-    // Nilai 0 adalah nilai awal master pagu, bukan plafon yang sengaja melarang
-    // pengajuan. Pada alur DP BTO, nominal kebutuhan tetap boleh diajukan agar
-    // dapat ditinjau pada tahap persetujuan berikutnya.
-    if (pagu.paguMax <= 0 && params.allowUnconfiguredOrZeroLimit) continue
-
-    // The pagu ceiling (paguMax) is denominated in the pagu row's currency. Comparing a
-    // USD submission against an IDR ceiling (or vice-versa) is meaningless and would let
-    // over-budget requests through or wrongly reject valid ones. Reject the mismatch.
     if (item.useDollar !== pagu.useDollar) {
       const paguCur = pagu.useDollar ? 'USD' : 'IDR'
       const itemCur = item.useDollar ? 'USD' : 'IDR'
@@ -206,9 +195,11 @@ export async function validateRincianAgainstPagu(params: {
       ? Number(item.nilaiUsd ?? item.nilaiTotal)
       : Number(item.nilaiTotal)
 
-    if (nilaiDiajukan > pagu.paguMax && !params.isSoftLimit) {
+    if (nilaiDiajukan > maxAllowed && !params.isSoftLimit) {
+      const formattedMax = pagu.useDollar ? `$${maxAllowed.toLocaleString()}` : `Rp ${maxAllowed.toLocaleString('id-ID')}`
+      const formattedDiajukan = pagu.useDollar ? `$${nilaiDiajukan.toLocaleString()}` : `Rp ${nilaiDiajukan.toLocaleString('id-ID')}`
       throw new AppError(
-        `Pengajuan biaya '${label}' sebesar ${nilaiDiajukan} melebihi pagu sebesar ${pagu.paguMax}`,
+        `Pengajuan biaya '${label}' sebesar ${formattedDiajukan} melebihi pagu limit sebesar ${formattedMax}`,
         400,
       )
     }

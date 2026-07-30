@@ -316,11 +316,12 @@ export default async function btoRoutes(fastify: FastifyInstance) {
     return reply.send(ok(result))
   })
 
-  /** POST /api/bto/:id/cancel — Batalkan BTO oleh user */
+  /** POST /api/bto/:id/cancel — Batalkan BTO oleh user/admin */
   fastify.post('/:id/cancel', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { id } = req.params as { id: string }
     const { catatan } = z.object({ catatan: z.string() }).parse(req.body)
-    const result = await cancelBtoService(id, { id: req.user.sub, nama: req.user.nama ?? '' }, catatan)
+    const isAdmin = (req.user.role ?? '').split(',').some(r => ['super_admin', 'admin', 'sdm'].includes(r))
+    const result = await cancelBtoService(id, { id: req.user.sub, nama: req.user.nama ?? '', isAdmin }, catatan)
     return reply.send(ok(result))
   })
 
@@ -428,7 +429,8 @@ export default async function btoRoutes(fastify: FastifyInstance) {
   /** POST /api/bto/:id/submit */
   fastify.post('/:id/submit', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { id } = req.params as { id: string }
-    const result = await submitBtoService(id, { id: req.user.sub, nama: req.user.nama ?? '', gradeLevel: req.user.gradeLevel })
+    const isAdmin = (req.user.role ?? '').split(',').some(r => ['super_admin', 'admin', 'sdm'].includes(r))
+    const result = await submitBtoService(id, { id: req.user.sub, nama: req.user.nama ?? '', gradeLevel: req.user.gradeLevel, isAdmin })
     return reply.send(ok(result))
   })
 
