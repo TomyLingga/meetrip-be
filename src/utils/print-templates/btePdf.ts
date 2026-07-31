@@ -67,8 +67,9 @@ export function btePrintTemplate(
     dynamicDetailHtml += `
       <tr>
         <td></td>
-        <td class="subno section-label" style="text-align: center;">X.${catIndex}</td>
-        <td class="section-label" colspan="3">${formatKategoriName(kategori)}</td>
+        <td class="subno" style="font-weight: bold;">X.${catIndex}</td>
+        <td class="label" style="font-weight: bold;" colspan="2">${formatKategoriName(kategori)}</td>
+        <td></td>
       </tr>
     `;
     // Individual items: Col 1 empty, Col 2 empty, X.1.1 in Col 3 (Sub-item Number), Label in Col 4 (Expenditure), Value in Col 5
@@ -78,9 +79,9 @@ export function btePrintTemplate(
         <tr>
           <td></td>
           <td></td>
-          <td class="subno" style="text-align: center;">X.${catIndex}.${idx + 1}</td>
-          <td>${esc(item.rincianLabel || '-')}</td>
-          <td class="money-cell">${valStr}</td>
+          <td class="subno" style="font-weight: normal; padding-left: 5px;">X.${catIndex}.${idx + 1}</td>
+          <td class="label" style="font-weight: normal;">${esc(item.rincianLabel || '-')}</td>
+          <td>: &nbsp; ${valStr}</td>
         </tr>
       `;
     });
@@ -97,9 +98,9 @@ export function btePrintTemplate(
                         <tr>
                                 <td></td>
                                 <td></td>
-                                <td class="subno" style="text-align: center;">X.${etcSectionIndex}.${idx + 1}</td>
-                                <td>${esc(item.keterangan)}</td>
-                                <td class="money-cell">${money(item.nilai, item.useDollar)}</td>
+                                <td class="subno" style="font-weight: normal; padding-left: 5px;">X.${etcSectionIndex}.${idx + 1}</td>
+                                <td class="label" style="font-weight: normal;">${esc(item.keterangan)}</td>
+                                <td>: &nbsp; ${money(item.nilai, item.useDollar)}</td>
                         </tr>`).join('');
 
   return `
@@ -475,32 +476,31 @@ export function btePrintTemplate(
                         </colgroup>
                         <tr>
                                 <td class="roman">X</td>
-                                <td class="section-label" colspan="4">DETAIL OF TRAVEL EXPENSES</td>
-                        </tr>
-                        <tr class="bold text-center">
+                                <td class="label" colspan="3" style="font-weight: bold;">DETAIL OF TRAVEL EXPENSES (BTE)</td>
                                 <td></td>
-                                <td class="subno" colspan="2">Number</td>
-                                <td class="expense">Expenditure</td>
-                                <td class="amount">Total Price</td>
                         </tr>
                         ${dynamicDetailHtml}
                         <tr>
                                 <td></td>
-                                <td class="subno section-label" style="text-align: center;">X.${etcSectionIndex}</td>
-                                <td class="section-label" colspan="3">ETC</td>
+                                <td class="subno" style="font-weight: bold;">X.${etcSectionIndex}</td>
+                                <td class="label" style="font-weight: bold;" colspan="2">ETC</td>
+                                <td></td>
                         </tr>
                         ${etcRows}
                         <tr class="bold">
-                                <td class="total-label" colspan="4">TOTAL EXPENSES</td>
-                                <td class="money-cell">${money(bteTotal)}</td>
-                        </tr>
-                        <tr>
-                                <td class="total-label" colspan="4">DOWN PAYMENT</td>
-                                <td class="money-cell">${money(dpTotal)}</td>
+                                <td></td>
+                                <td class="label" colspan="3" style="text-align: right; padding-right: 15px;">TOTAL EXPENSES</td>
+                                <td>: &nbsp; ${money(bteTotal)}</td>
                         </tr>
                         <tr class="bold">
-                                <td class="total-label" colspan="4">${finalTotal < 0 ? 'FINAL (OVERPAID / REFUND TO COMPANY)' : finalTotal > 0 ? 'FINAL (UNDERPAID / REIMBURSE TO EMPLOYEE)' : 'FINAL'}</td>
-                                <td class="money-cell bold">${money(finalTotal < 0 ? Math.abs(finalTotal) : finalTotal)}</td>
+                                <td></td>
+                                <td class="label" colspan="3" style="text-align: right; padding-right: 15px;">DOWN PAYMENT</td>
+                                <td>: &nbsp; ${money(dpTotal)}</td>
+                        </tr>
+                        <tr class="bold">
+                                <td></td>
+                                <td class="label" colspan="3" style="text-align: right; padding-right: 15px;">${finalTotal < 0 ? 'LEBIH BAYAR (REFUND TO COMPANY)' : finalTotal > 0 ? 'KURANG BAYAR (REIMBURSE TO EMPLOYEE)' : 'SELESAI (NIHIL)'}</td>
+                                <td>: &nbsp; ${money(Math.abs(finalTotal))}</td>
                         </tr>
                 </table>
 

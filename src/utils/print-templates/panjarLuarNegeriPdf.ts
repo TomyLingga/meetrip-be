@@ -1,5 +1,5 @@
 export function panjarLuarNegeriPrintTemplate(data: any) {
-  const { btoRow, owner, ptRow, dpRow, logs, LOGO_SRC, esc, dateText, durationDays, money, financeQr } = data;
+  const { btoRow, owner, ptRow, dpRow, logs, LOGO_SRC, esc, dateText, durationDays, money, financeQr, tipeRincianMap = {} } = data;
 
   const departureTime = btoRow.estBerangkat ? new Date(btoRow.estBerangkat).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', timeZone: 'Asia/Jakarta'}).replace('.', ':') : '07:00';
   const arrivalTime = btoRow.estKembali ? new Date(btoRow.estKembali).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', timeZone: 'Asia/Jakarta'}).replace('.', ':') : '23:00';
@@ -36,7 +36,11 @@ export function panjarLuarNegeriPrintTemplate(data: any) {
   const rincianList = dpRow?.dpRincian || [];
   
   const formatKategoriName = (kat: string) => {
-    const k = kat ? kat.toLowerCase() : '';
+    if (!kat) return 'LAIN-LAIN / OTHERS';
+    const k = kat.trim().toLowerCase();
+    if (tipeRincianMap && tipeRincianMap[k]) {
+      return tipeRincianMap[k].toUpperCase();
+    }
     switch (k) {
       case 'saku': return 'UANG SAKU / POCKET MONEY';
       case 'hotel': return 'AKOMODASI / HOTEL';

@@ -55,8 +55,9 @@ export function bteLuarNegeriPrintTemplate(data: any) {
 		dynamicDetailHtml += `
 		<tr style="font-size: 10px;">
 			<td></td>
-			<td class="subno section-label" style="text-align: center;">X.${catIndex}</td>
-			<td class="section-label" colspan="3">${formatKategoriName(kategori)}</td>
+			<td style="font-style: italic; padding-left: 20px; font-weight: bold;">X.${catIndex}</td>
+			<td style="font-style: italic; font-weight: bold;" colspan="2">${formatKategoriName(kategori)}</td>
+			<td></td>
 		</tr>
 		`;
 		// Individual items: Col 1 empty, Col 2 empty, X.1.1 in Col 3 (Sub-item Number), Label in Col 4 (Expenditure), Value in Col 5
@@ -66,9 +67,9 @@ export function bteLuarNegeriPrintTemplate(data: any) {
 			<tr style="font-size: 10px;">
 				<td></td>
 				<td></td>
-				<td class="subno" style="text-align: center;">X.${catIndex}.${idx + 1}</td>
-				<td>${esc(item.rincianLabel || '-')}</td>
-				<td class="text-right">${valStr}</td>
+				<td style="font-style: italic; padding-left: 5px; font-weight: normal;">X.${catIndex}.${idx + 1}</td>
+				<td style="font-style: italic; font-weight: normal;">${esc(item.rincianLabel || '-')}</td>
+				<td>: &nbsp; ${valStr}</td>
 			</tr>
 			`;
 		});
@@ -86,11 +87,11 @@ export function bteLuarNegeriPrintTemplate(data: any) {
 	const etcRows = (bteRow?.bteBiayaLain || []).map((item: any, idx: number) => {
 		return `
       <tr style="font-size:10px;">
-        <td class="border border-dark text-center"></td>
-        <td class="border border-dark text-center"></td>
-        <td class="border border-dark text-center">X.${etcSectionIndex}.${idx + 1}</td>
-        <td class="border border-dark" style="padding-left:3%; text-transform: uppercase;">${esc(item.keterangan)}</td>
-        <td class="border border-dark text-right" style="padding-right:3%;">${money(item.nilai, item.useDollar || isBteDollar)}</td>
+        <td></td>
+        <td></td>
+        <td style="font-style: italic; padding-left: 5px; font-weight: normal;">X.${etcSectionIndex}.${idx + 1}</td>
+        <td style="font-style: italic; font-weight: normal;">${esc(item.keterangan)}</td>
+        <td>: &nbsp; ${money(item.nilai, item.useDollar || isBteDollar)}</td>
       </tr>`;
 	}).join('');
 
@@ -241,6 +242,10 @@ export function bteLuarNegeriPrintTemplate(data: any) {
 		}
 		.info-value {
 			border-left: none !important;
+		}
+		.subno {
+			text-align: center;
+			white-space: nowrap;
 		}
 		.section-label {
 			font-weight: 800;
@@ -411,32 +416,28 @@ export function bteLuarNegeriPrintTemplate(data: any) {
 			<td align="center">X</td>
 			<td class="bold" style="font-style: italic;" colspan="4">DETAIL OF TRAVEL EXPENSES</td>
 		</tr>
-		<tr class="bold text-center" style="font-size: 10px;">
-			<td></td>
-			<td style="text-align: center;" colspan="2">Number</td>
-			<td>Expenditure</td>
-			<td style="text-align: right;">Total Price</td>
-		</tr>
 		${dynamicDetailHtml}
 		<tr class="bold" style="font-size: 10px;">
 			<td></td>
-			<td style="font-style: italic; text-align: center;">X.${etcSectionIndex}</td>
-			<td style="font-style: italic;" colspan="3">ETC</td>
+			<td style="font-style: italic; padding-left: 20px; font-weight: bold;">X.${etcSectionIndex}</td>
+			<td style="font-style: italic; font-weight: bold;" colspan="2">ETC</td>
+			<td></td>
 		</tr>
 		${etcRows}
 		<tr class="bold" style="font-size: 11px;">
-			<td colspan="4" align="right" style="padding-right: 15px; font-style: italic;">TOTAL EXPENSES</td>
-			<td class="text-right">${money(bteTotal, isBteDollar)}</td>
+			<td></td>
+			<td style="font-style: italic; padding-left: 20px;" colspan="3">TOTAL EXPENSES</td>
+			<td>: &nbsp; ${money(bteTotal, isBteDollar)}</td>
 		</tr>
 		<tr class="bold" style="font-size: 11px;">
-			<td colspan="4" align="right" style="padding-right: 15px; font-style: italic;">DOWN PAYMENT</td>
-			<td class="text-right">${money(dpTotal, isBteDollar)}</td>
+			<td></td>
+			<td style="font-style: italic; padding-left: 20px;" colspan="3">DOWN PAYMENT</td>
+			<td>: &nbsp; ${money(dpTotal, isBteDollar)}</td>
 		</tr>
 		<tr class="bold" style="font-size: 11px;">
-			<td colspan="4" align="right" style="padding-right: 15px; font-style: italic;">
-				${finalTotal < 0 ? 'FINAL (OVERPAID / REFUND TO COMPANY)' : finalTotal > 0 ? 'FINAL (UNDERPAID / REIMBURSE TO EMPLOYEE)' : 'FINAL'}
-			</td>
-			<td class="text-right">${money(finalTotal < 0 ? Math.abs(finalTotal) : finalTotal, isBteDollar)}</td>
+			<td></td>
+			<td style="font-style: italic; padding-left: 20px;" colspan="3">${finalTotal >= 0 ? 'BALANCE REIMBURSEMENT' : 'BALANCE REFUND'}</td>
+			<td>: &nbsp; ${money(Math.abs(finalTotal), isBteDollar)}</td>
 		</tr>
 	</table>
 

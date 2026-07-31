@@ -455,6 +455,15 @@ async function renderDp(btoRow: BtoRow, owner: any, dpRow: any, logs: DpLog[]) {
     });
   }
 
+  // Load ref_tipe_rincian master data for dynamic category labels
+  const allTipeRincian = await db.select().from(refTipeRincian);
+  const tipeRincianMap: Record<string, string> = {};
+  for (const item of allTipeRincian) {
+    if (item.kode) {
+      tipeRincianMap[item.kode.toLowerCase().trim()] = item.label;
+    }
+  }
+
   const spdkRow = await db.query.spdk.findFirst({ where: eq(spdkTable.btoId, btoRow.id) })
   const printBtoRow = spdkRow?.nomorSpdk ? { ...btoRow, nomorBto: spdkRow.nomorSpdk } : btoRow
 
@@ -471,9 +480,10 @@ async function renderDp(btoRow: BtoRow, owner: any, dpRow: any, logs: DpLog[]) {
       durationDays,
       money,
       financeQr,
+      tipeRincianMap,
     })
   }
-  return panjarPrintTemplate(printBtoRow, owner, ptRow, logs, LOGO_SRC, esc, dateText, durationDays, money, dpRow, financeQr)
+  return panjarPrintTemplate(printBtoRow, owner, ptRow, logs, LOGO_SRC, esc, dateText, durationDays, money, dpRow, financeQr, tipeRincianMap)
 }
 
 async function renderBte(btoRow: BtoRow, owner: any, bteRow: any, logs: BteLog[]) {

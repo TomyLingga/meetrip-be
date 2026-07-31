@@ -9,7 +9,8 @@ export function panjarPrintTemplate(
   durationDays: (d1: any, d2: any) => number,
   money: (val: any, useDollar?: boolean) => string,
   dpRow: any,
-  financeQr?: string | null
+  financeQr?: string | null,
+  tipeRincianMap: Record<string, string> = {}
 ) {
   const departureTime = btoRow.estBerangkat ? new Date(btoRow.estBerangkat).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', timeZone: 'Asia/Jakarta'}).replace('.', ':') : '07:00';
   const arrivalTime = btoRow.estKembali ? new Date(btoRow.estKembali).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', timeZone: 'Asia/Jakarta'}).replace('.', ':') : '23:00';
@@ -45,7 +46,11 @@ export function panjarPrintTemplate(
   const rincianList = dpRow?.dpRincian || [];
   
   const formatKategoriName = (kat: string) => {
-    const k = kat ? kat.toLowerCase() : '';
+    if (!kat) return 'LAIN-LAIN / OTHERS';
+    const k = kat.trim().toLowerCase();
+    if (tipeRincianMap && tipeRincianMap[k]) {
+      return tipeRincianMap[k].toUpperCase();
+    }
     switch (k) {
       case 'saku': return 'UANG SAKU / POCKET MONEY';
       case 'hotel': return 'AKOMODASI / HOTEL';
