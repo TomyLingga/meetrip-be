@@ -43,6 +43,7 @@ type BteLog = typeof bteApprovalLog.$inferSelect
 type AttendStampRow = typeof attendStamp.$inferSelect
 
 import { LOGO_INL_BASE64, LOGO_INL_RIGHT_BASE64 } from '../assets/logoBase64'
+import { fetchWithTimeout } from '../utils/http'
 
 let LOGO_SRC = LOGO_INL_BASE64
 let LOGO_RIGHT_SRC = LOGO_INL_RIGHT_BASE64
@@ -125,7 +126,7 @@ async function qrTextDataUrl(text: string | null) {
 async function fetchPortalEmployee(employeeId?: string | null) {
   if (!employeeId) return null
   try {
-    const res = await fetch(`${config.portal.apiUrl}/api/sso/employees?id=${employeeId}`, {
+    const res = await fetchWithTimeout(`${config.portal.apiUrl}/api/sso/employees?id=${employeeId}`, {
       headers: { 'x-internal': config.portal.internalToken },
     })
     if (!res.ok) return null
@@ -655,7 +656,7 @@ async function assertDocumentAccess(btoRow: BtoRow, user: any, passedSpdkRow?: t
       let iterations = 0
       while (currentEmployeeId && iterations < 5) {
         iterations++
-        const res = await fetch(
+        const res = await fetchWithTimeout(
           `${config.portal.apiUrl}/api/sso/employees?id=${currentEmployeeId}`,
           { headers: { 'x-internal': config.portal.internalToken } }
         )

@@ -6,6 +6,7 @@ import { db }              from '../db/connection'
 import { meetripUserRole } from '../db/schema'
 import { ok }              from '../utils/response'
 import { config }          from '../config/env'
+import { fetchWithTimeout } from '../utils/http'
 
 interface PortalEmployee {
   id:             string        // portal user ID
@@ -41,7 +42,7 @@ export default async function portalUserRoutes(fastify: FastifyInstance) {
     let employees: PortalEmployee[] = []
 
     try {
-      const res = await fetch(portalUrl, {
+      const res = await fetchWithTimeout(portalUrl, {
         headers: { 'x-internal': config.portal.internalToken },
       })
       if (res.ok) {

@@ -7,6 +7,16 @@ import { eq, desc, asc } from 'drizzle-orm';
 import { ok } from '../utils/response';
 import { AppError } from '../utils/errorHandler';
 import { config } from '../config/env';
+import { fetchWithTimeout } from '../utils/http';
+
+// Saran tipe rincian bawaan — dipakai hanya untuk tampilan ketika master kosong.
+const DEFAULT_TIPE_RINCIAN = [
+  { id: null, kode: 'SAKU', label: 'Uang Saku / Pocket Money' },
+  { id: null, kode: 'HOTEL', label: 'Hotel / Akomodasi' },
+  { id: null, kode: 'LAUNDRY', label: 'Laundry' },
+  { id: null, kode: 'TRANSPORT', label: 'Transportasi / Tiket' },
+  { id: null, kode: 'LAIN_LAIN', label: 'Lain-lain' },
+];
 
 // ─── Zod Schemas for validation ──────────────────────────────────────────────
 const gradeSchema = z.object({
@@ -67,7 +77,7 @@ export default async function masterRoutes(fastify: FastifyInstance) {
   // ─── ref_grade CRUD (Dikelola oleh Portal SSO) ──────────────────────────────
   fastify.get('/ref-grade', { preHandler: [fastify.authenticate] }, async () => {
     try {
-      const res = await fetch(`${config.portal.apiUrl}/api/sso/grades`, {
+      const res = await fetchWithTimeout(`${config.portal.apiUrl}/api/sso/grades`, {
         headers: { 'x-internal': config.portal.internalToken },
       });
       if (res.ok) {
@@ -144,19 +154,15 @@ export default async function masterRoutes(fastify: FastifyInstance) {
   });
 
   // ─── ref_tipe_rincian CRUD ─────────────────────────────────────────────────
+  /*
+   * Endpoint baca murni. Dulu menyisipkan 5 baris default bila tabel kosong —
+   * dua pemuatan halaman paralel bisa menabrak unique `kode` dan salah satunya
+   * berakhir 500. Penyemaian dipindahkan ke `DEFAULT_TIPE_RINCIAN` di bawah, yang
+   * hanya dikembalikan sebagai saran (tidak ditulis) saat master masih kosong.
+   */
   fastify.get('/ref-tipe-rincian', { preHandler: [fastify.authenticate] }, async () => {
-    let rows = await db.select().from(refTipeRincian);
-    if (rows.length === 0) {
-      const defaults = [
-        { kode: 'SAKU', label: 'Uang Saku / Pocket Money' },
-        { kode: 'HOTEL', label: 'Hotel / Akomodasi' },
-        { kode: 'LAUNDRY', label: 'Laundry' },
-        { kode: 'TRANSPORT', label: 'Transportasi / Tiket' },
-        { kode: 'LAIN_LAIN', label: 'Lain-lain' },
-      ];
-      rows = await db.insert(refTipeRincian).values(defaults).returning();
-    }
-    return ok(rows);
+    const rows = await db.select().from(refTipeRincian);
+    return ok(rows.length > 0 ? rows : DEFAULT_TIPE_RINCIAN);
   });
 
   fastify.post('/ref-tipe-rincian', { preHandler: [fastify.authenticateAdmin] }, async (req, reply) => {

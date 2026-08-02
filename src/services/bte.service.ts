@@ -1,7 +1,7 @@
 // ─── BTE Service ───────────────────────────────────────────────────────────────
 import { db } from '../db/connection';
-import { bte, bteRincian, bteBiayaLain, bteApprovalLog, bto, btoApprovalLog, localUserCache } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { attendStamp, bte, bteRincian, bteBiayaLain, bteApprovalLog, bto, btoApprovalLog, localUserCache } from '../db/schema';
+import { and, eq } from 'drizzle-orm';
 import { AppError } from '../utils/errorHandler';
 import { getGradeIdByLevel, hitungDurasiHariMalam, validateRincianAgainstPagu } from './pagu.service';
 
@@ -200,39 +200,46 @@ export async function createOrUpdateBteService(
     }).where(eq(bto.id, btoId));
   }
 
-  // Clear existing items and insert new ones
-  await db.delete(bteRincian).where(eq(bteRincian.bteId, bteRow.id));
-  if (data.rincian.length > 0) {
-    await db.insert(bteRincian).values(
-      data.rincian.map((r) => ({
-        bteId: bteRow!.id,
-        rincianId: r.rincianId,
-        rincianLabel: r.rincianLabel,
-        kategori: r.kategori || 'lain_lain',
-        jumlahHari: r.jumlahHari,
-        nilaiPerHari: String(r.nilaiPerHari),
-        nilaiTotal: String(r.nilaiTotal),
-        useDollar: r.useDollar,
-        nilaiUsd: r.useDollar ? String(r.nilaiUsd || r.nilaiTotal) : '0',
-        paguSaatInput: r.paguSaatInput ? String(r.paguSaatInput) : undefined,
-        isUnlimited: r.isUnlimited ?? false,
-        catatan: r.catatan,
-      }))
-    );
-  }
+  /*
+   * Ganti isi rincian dalam SATU transaksi. Sebelumnya DELETE dan INSERT berjalan
+   * terpisah: bila INSERT gagal (mis. rincianId tidak valid), rincian biaya lama
+   * hilang permanen dan user harus mengetik ulang seluruh realisasi.
+   */
+  const bteIdForItems = bteRow.id;
+  await db.transaction(async (tx) => {
+    await tx.delete(bteRincian).where(eq(bteRincian.bteId, bteIdForItems));
+    if (data.rincian.length > 0) {
+      await tx.insert(bteRincian).values(
+        data.rincian.map((r) => ({
+          bteId: bteIdForItems,
+          rincianId: r.rincianId,
+          rincianLabel: r.rincianLabel,
+          kategori: r.kategori || 'lain_lain',
+          jumlahHari: r.jumlahHari,
+          nilaiPerHari: String(r.nilaiPerHari),
+          nilaiTotal: String(r.nilaiTotal),
+          useDollar: r.useDollar,
+          nilaiUsd: r.useDollar ? String(r.nilaiUsd || r.nilaiTotal) : '0',
+          paguSaatInput: r.paguSaatInput ? String(r.paguSaatInput) : undefined,
+          isUnlimited: r.isUnlimited ?? false,
+          catatan: r.catatan,
+        }))
+      );
+    }
 
-  await db.delete(bteBiayaLain).where(eq(bteBiayaLain.bteId, bteRow.id));
-  if (data.biayaLain && data.biayaLain.length > 0) {
-    await db.insert(bteBiayaLain).values(
-      data.biayaLain.map((bl) => ({
-        bteId: bteRow!.id,
-        keterangan: bl.keterangan,
-        nilai: String(bl.nilai),
-        useDollar: bl.useDollar,
-        nilaiUsd: bl.useDollar ? String(bl.nilaiUsd || bl.nilai) : '0',
-      }))
-    );
-  }
+    await tx.delete(bteBiayaLain).where(eq(bteBiayaLain.bteId, bteIdForItems));
+    if (data.biayaLain && data.biayaLain.length > 0) {
+      await tx.insert(bteBiayaLain).values(
+        data.biayaLain.map((bl) => ({
+          bteId: bteIdForItems,
+          keterangan: bl.keterangan,
+          nilai: String(bl.nilai),
+          useDollar: bl.useDollar,
+          nilaiUsd: bl.useDollar ? String(bl.nilaiUsd || bl.nilai) : '0',
+        }))
+      );
+    }
+  });
 
   return { bteId: bteRow.id, totalIdr, totalUsd };
 }
@@ -304,6 +311,30 @@ export async function adminApproveBteService(bteId: string, action: 'approve' | 
   if (bteRow.status !== 'ADMIN_REVIEW' && bteRow.status !== 'SUBMITTED') {
     throw new AppError('BTE bukan dalam tahap review admin', 400);
   }
+
+  /*
+   * Persetujuan realisasi wajib bertumpu pada bukti perjalanan.
+   *
+   * Dulu fungsi ini hanya melihat `bte.status`, tidak pernah `bto.status` maupun
+   * keberadaan absen GPS — sehingga admin bisa membuat BTE untuk dinas yang belum
+   * berjalan, menyetujuinya, lalu menandainya dibayar. Uang keluar tanpa satu baris
+   * attend_stamp.
+   */
+  if (action === 'approve') {
+    const [btoRow] = await db.select().from(bto).where(eq(bto.id, bteRow.btoId)).limit(1);
+    if (!btoRow) throw new AppError('BTO tidak ditemukan', 404);
+    if (!['ADMIN_BTE_REVIEW', 'BTE_DRAFT', 'REVISION_BTE'].includes(btoRow.status)) {
+      throw new AppError(`BTO berstatus ${btoRow.status} belum sampai tahap review realisasi BTE`, 400);
+    }
+    const [stamp] = await db.select({ id: attendStamp.id })
+      .from(attendStamp)
+      .where(and(eq(attendStamp.btoId, bteRow.btoId), eq(attendStamp.isValid, true)))
+      .limit(1);
+    if (!stamp) {
+      throw new AppError('Belum ada bukti absen kedatangan (GPS) yang valid untuk dinas ini', 409);
+    }
+  }
+
   requireCatatanTindakan(action, catatan);
 
   const statusMap = {

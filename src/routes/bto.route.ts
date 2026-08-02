@@ -16,6 +16,8 @@ import { AppError } from '../utils/errorHandler'
 import path from 'path'
 import fs from 'fs'
 import { config } from '../config/env'
+import { assertBtoAccess } from '../services/access.service'
+import { fetchWithTimeout } from '../utils/http'
 
 interface PortalEmployeeOption {
   id: string
@@ -275,8 +277,8 @@ export default async function btoRoutes(fastify: FastifyInstance) {
   /** GET /api/bto/:id — Detail BTO */
   fastify.get('/:id', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { id } = req.params as { id: string }
-    const [row] = await db.select().from(bto).where(eq(bto.id, id)).limit(1)
-    if (!row) throw new AppError('BTO tidak ditemukan', 404)
+    // Cek hak baca: pemilik / pemberi tugas / approver SPDK / kepala unit / admin-SDM.
+    const row = await assertBtoAccess(id, { id: req.user.sub, employeeId: req.user.employeeId, role: req.user.role })
 
     const approvalLogs = await buildBtoApprovalTimeline(id)
     return reply.send(ok({ ...row, approvalLogs }))
@@ -285,6 +287,7 @@ export default async function btoRoutes(fastify: FastifyInstance) {
   /** GET /api/bto/:id/logs — List BTO Approval Logs */
   fastify.get('/:id/logs', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { id } = req.params as { id: string }
+    await assertBtoAccess(id, { id: req.user.sub, employeeId: req.user.employeeId, role: req.user.role })
     const approvalLogs = await buildBtoApprovalTimeline(id)
     return reply.send(ok(approvalLogs))
   })
@@ -496,8 +499,7 @@ export default async function btoRoutes(fastify: FastifyInstance) {
   /** GET /api/bto/:id/pagu — Hitung pagu semua rincian untuk BTO ini */
   fastify.get('/:id/pagu', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { id } = req.params as { id: string }
-    const [btoRow] = await db.select().from(bto).where(eq(bto.id, id)).limit(1)
-    if (!btoRow) throw new AppError('BTO tidak ditemukan', 404)
+    const btoRow = await assertBtoAccess(id, { id: req.user.sub, employeeId: req.user.employeeId, role: req.user.role })
 
     const userCache = await db.query.localUserCache.findFirst({
       where: eq(localUserCache.portalUserId, btoRow.employeeId),
@@ -534,7 +536,7 @@ export default async function btoRoutes(fastify: FastifyInstance) {
     if (!cfg) return reply.send(ok({ mode: 'grade_based', options: [] }))
 
     if (cfg.mode === 'fixed_person' && cfg.fixedEmployeeId) {
-      const portalRes = await fetch(`${config.portal.apiUrl}/api/sso/employees?id=${cfg.fixedEmployeeId}`, {
+      const portalRes = await fetchWithTimeout(`${config.portal.apiUrl}/api/sso/employees?id=${cfg.fixedEmployeeId}`, {
         headers: { 'x-internal': config.portal.internalToken },
       })
       const data = await portalRes.json().catch(() => ({ data: [] })) as { data: any[] }
@@ -552,7 +554,7 @@ export default async function btoRoutes(fastify: FastifyInstance) {
       }))
     }
 
-    const portalRes = await fetch(`${config.portal.apiUrl}/api/sso/employees?aboveGradeLevel=${gradeLevel}`, {
+    const portalRes = await fetchWithTimeout(`${config.portal.apiUrl}/api/sso/employees?aboveGradeLevel=${gradeLevel}`, {
       headers: { 'x-internal': config.portal.internalToken },
     })
     const data = await portalRes.json().catch(() => ({ data: [] })) as { data: any[] }
@@ -580,7 +582,7 @@ export default async function btoRoutes(fastify: FastifyInstance) {
 
     if (!gradeId) {
       try {
-        const portalRes = await fetch(`${config.portal.apiUrl}/api/sso/grades`, {
+        const portalRes = await fetchWithTimeout(`${config.portal.apiUrl}/api/sso/grades`, {
           headers: { 'x-internal': config.portal.internalToken },
         })
         if (portalRes.ok) {

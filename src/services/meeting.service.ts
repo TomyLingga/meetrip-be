@@ -156,13 +156,19 @@ export async function cancelMeetingService(id: string, userId: string, cancelRea
 }
 
 // ─── List Meeting (range tanggal) ────────────────────────────────────────────
-export async function listMeetingService(filters: { dateFrom?: Date; dateTo?: Date; ruangId?: string }) {
+const MEETING_LIST_MAX_ROWS = 500
+
+export async function listMeetingService(filters: { dateFrom?: Date; dateTo?: Date; ruangId?: string; limit?: number }) {
   const conditions: ReturnType<typeof gte>[] = []
   if (filters.dateFrom) conditions.push(gte(meeting.mulai, filters.dateFrom))
   if (filters.dateTo)   conditions.push(lte(meeting.mulai, filters.dateTo))
   if (filters.ruangId)  conditions.push(eq(meeting.ruangId, filters.ruangId) as any)
 
+  // Selalu berbatas: tanpa ini permintaan tanpa filter tanggal menarik seluruh tabel.
+  const limit = Math.min(Math.max(filters.limit ?? MEETING_LIST_MAX_ROWS, 1), MEETING_LIST_MAX_ROWS)
+
   return db.select().from(meeting)
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(meeting.mulai)
+    .limit(limit)
 }

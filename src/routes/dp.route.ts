@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getDpByBtoIdService, createOrUpdateDpService } from '../services/dp.service';
 import { ok } from '../utils/response';
 import { AppError } from '../utils/errorHandler';
+import { assertBtoAccess } from '../services/access.service';
 
 const dpUpsertSchema = z.object({
   exchangeRateUsd: z.number().optional(),
@@ -29,6 +30,7 @@ export default async function dpRoutes(fastify: FastifyInstance) {
   /** GET /api/dp/bto/:btoId — Dapatkan data DP untuk BTO */
   fastify.get('/bto/:btoId', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { btoId } = req.params as { btoId: string };
+    await assertBtoAccess(btoId, { id: req.user.sub, employeeId: req.user.employeeId, role: req.user.role });
     const result = await getDpByBtoIdService(btoId);
     return reply.send(ok(result));
   });

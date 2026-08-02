@@ -7,6 +7,7 @@ import { AppError }    from '../utils/errorHandler'
 import { generateNomor, nomorSpdkFromBto } from '../utils/romanNumeral'
 import { haversineKm } from './geocoding.service'
 import { config as appConfig } from '../config/env'
+import { fetchWithTimeout } from '../utils/http'
 
 type PortalEmployeeLike = {
   id?: string | null
@@ -36,7 +37,7 @@ function isBom1Approver(employee?: PortalEmployeeLike | null) {
 }
 
 async function fetchPortalEmployee(employeeId: string) {
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `${appConfig.portal.apiUrl}/api/sso/employees?id=${employeeId}`,
     { headers: { 'x-internal': appConfig.portal.internalToken } }
   )
@@ -116,7 +117,7 @@ async function isActorBom1Approver(actor: { id: string; employeeId?: string | nu
   if (hasBom1Kode) return true
 
   try {
-    const portalRes = await fetch(`${appConfig.portal.apiUrl}/api/sso/grades`, {
+    const portalRes = await fetchWithTimeout(`${appConfig.portal.apiUrl}/api/sso/grades`, {
       headers: { 'x-internal': appConfig.portal.internalToken },
     })
     if (portalRes.ok) {
@@ -256,19 +257,27 @@ export async function issueSpdkService(
 ) {
   requireCatatanTindakan('issued', catatanAdmin)
 
+  /*
+   * Validasi dulu, tulis kemudian. Sebelumnya UPDATE bto dijalankan di atas
+   * pemeriksaan status, sehingga request yang berakhir 400 ("BTO belum di tahap
+   * SPDK Draft") tetap meninggalkan perubahan permanen pada baris BTO.
+   */
+  const [btoRowBefore] = await db.select().from(bto).where(eq(bto.id, btoId)).limit(1)
+  if (!btoRowBefore) throw new AppError('BTO tidak ditemukan', 404)
+  if (btoRowBefore.status !== 'SPDK_DRAFT') throw new AppError('BTO belum di tahap SPDK Draft', 400)
+  const existingSpdk = await db.query.spdk.findFirst({ where: eq(spdk.btoId, btoId) })
+  if (existingSpdk) throw new AppError('SPDK untuk BTO ini sudah pernah diterbitkan', 400)
+
   if (btoUpdateData && Object.keys(btoUpdateData).length > 0) {
     const cleanUpdate: any = { ...btoUpdateData, updatedAt: new Date() }
     if (cleanUpdate.estBerangkat) cleanUpdate.estBerangkat = new Date(cleanUpdate.estBerangkat)
     if (cleanUpdate.estKembali) cleanUpdate.estKembali = new Date(cleanUpdate.estKembali)
-    
+
     await db.update(bto).set(cleanUpdate).where(eq(bto.id, btoId))
   }
 
   const [btoRow] = await db.select().from(bto).where(eq(bto.id, btoId)).limit(1)
   if (!btoRow) throw new AppError('BTO tidak ditemukan', 404)
-  if (btoRow.status !== 'SPDK_DRAFT') throw new AppError('BTO belum di tahap SPDK Draft', 400)
-  const existingSpdk = await db.query.spdk.findFirst({ where: eq(spdk.btoId, btoId) })
-  if (existingSpdk) throw new AppError('SPDK untuk BTO ini sudah pernah diterbitkan', 400)
 
   // Tentukan approver SPDK
   const cfg = await ensureApproverSpdkConfig()
@@ -394,12 +403,36 @@ export async function kabagApproveSpdkService(
   if (!spdkRow) throw new AppError('SPDK tidak ditemukan', 404)
   if (spdkRow.status !== 'KABAG_REVIEW') throw new AppError('Bukan tahap Kabag review', 400)
   const actorIdentifiers = [actor.id, actor.employeeId].filter((id): id is string => Boolean(id))
-  const actorIsBom1 = await isActorBom1Approver(actor)
   if (!isAdmin && spdkRow.approverKabagId && !actorIdentifiers.includes(spdkRow.approverKabagId)) {
     throw new AppError('Anda bukan approver SPDK ini', 403)
   }
-  if (!isAdmin && !spdkRow.approverKabagId && !actorIsBom1) {
-    throw new AppError('Anda bukan approver SPDK ini', 403)
+  /*
+   * Fail-closed: dulu SPDK tanpa approver boleh disetujui oleh SIAPA PUN pemegang
+   * grade BOM-1. Karena kolom approver bisa kosong akibat resolve yang gagal,
+   * celah itu setara "approval bebas". Sekarang approver dihitung ulang lebih
+   * dulu; hanya orang hasil perhitungan (atau admin) yang boleh menyetujui, dan
+   * bila approver tidak dapat ditentukan, permintaan ditolak dengan pesan jelas.
+   */
+  if (!isAdmin && !spdkRow.approverKabagId) {
+    const [btoRow] = await db.select().from(bto).where(eq(bto.id, spdkRow.btoId)).limit(1)
+    if (!btoRow) throw new AppError('BTO tidak ditemukan', 404)
+    const cfg = await ensureApproverSpdkConfig()
+    const resolved = await resolveSpdkApproverKabag(btoRow, cfg)
+    if (!resolved.id) {
+      throw new AppError(
+        'Approver SPDK belum dapat ditentukan dari struktur organisasi. Minta admin menetapkan approver terlebih dahulu.',
+        409,
+      )
+    }
+    if (!actorIdentifiers.includes(resolved.id)) {
+      throw new AppError('Anda bukan approver SPDK ini', 403)
+    }
+    await db.update(spdk).set({
+      approverKabagId: resolved.id,
+      approverKabagNama: resolved.nama,
+    }).where(eq(spdk.id, spdkId))
+    spdkRow.approverKabagId = resolved.id
+    spdkRow.approverKabagNama = resolved.nama
   }
   requireCatatanTindakan(aksi, catatan)
 

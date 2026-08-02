@@ -4,12 +4,13 @@ import { z } from 'zod';
 import { getBteByBtoIdService, createOrUpdateBteService, submitBteService, adminApproveBteService, markBtePaidService } from '../services/bte.service';
 import { db } from '../db/connection';
 import { bte, bteApprovalLog, bteBiayaLain, bteRincian, bto, dp } from '../db/schema';
-import { desc, eq } from 'drizzle-orm';
-import { ok } from '../utils/response';
+import { desc, eq, inArray, sql } from 'drizzle-orm';
+import { ok, paginated, parsePagination } from '../utils/response';
 import { AppError } from '../utils/errorHandler';
 import path from 'path';
 import fs from 'fs';
 import { config } from '../config/env';
+import { assertBtoAccess } from '../services/access.service';
 
 const bteUpsertSchema = z.object({
   tglBerangkat: z.string().optional(),
@@ -43,30 +44,63 @@ const bteUpsertSchema = z.object({
 });
 
 export default async function bteRoutes(fastify: FastifyInstance) {
-  /** GET /api/bte/admin/list — List BTE for admin review pages */
-  fastify.get('/admin/list', { preHandler: [fastify.authenticateAdmin] }, async (_req, reply) => {
-    const rows = await db.select().from(bte).orderBy(desc(bte.updatedAt));
-    const result = await Promise.all(rows.map(async (row) => {
-      const [btoRow] = await db.select().from(bto).where(eq(bto.id, row.btoId)).limit(1);
-      const [dpRow] = await db.select().from(dp).where(eq(dp.btoId, row.btoId)).limit(1);
-      const rincianRows = await db.select().from(bteRincian).where(eq(bteRincian.bteId, row.id));
-      const biayaLainRows = await db.select().from(bteBiayaLain).where(eq(bteBiayaLain.bteId, row.id));
+  /**
+   * GET /api/bte/admin/list — List BTE for admin review pages
+   *
+   * Dulu: ambil SEMUA baris bte lalu 4 query per baris (N+1) tanpa pagination,
+   * padahal sidebar admin memanggilnya tiap 30 detik. Sekarang berbatas halaman
+   * dan seluruh relasi diambil dengan 4 query batch (inArray), bukan per baris.
+   */
+  fastify.get('/admin/list', { preHandler: [fastify.authenticateAdmin] }, async (req, reply) => {
+    const { page, limit } = parsePagination(req.query as any);
+    const offset = (page - 1) * limit;
 
-      return {
-        ...row,
-        bto: btoRow ?? null,
-        dp: dpRow ?? null,
-        bteRincian: rincianRows,
-        bteBiayaLain: biayaLainRows,
-      };
+    const [totalRow] = await db.select({ count: sql<number>`count(*)` }).from(bte);
+    const rows = await db.select().from(bte).orderBy(desc(bte.updatedAt)).limit(limit).offset(offset);
+
+    if (rows.length === 0) {
+      return reply.send(paginated([], page, limit, Number(totalRow?.count ?? 0)));
+    }
+
+    const bteIds = rows.map((r) => r.id);
+    const btoIds = Array.from(new Set(rows.map((r) => r.btoId)));
+
+    const [btoRows, dpRows, rincianRows, biayaLainRows] = await Promise.all([
+      db.select().from(bto).where(inArray(bto.id, btoIds)),
+      db.select().from(dp).where(inArray(dp.btoId, btoIds)),
+      db.select().from(bteRincian).where(inArray(bteRincian.bteId, bteIds)),
+      db.select().from(bteBiayaLain).where(inArray(bteBiayaLain.bteId, bteIds)),
+    ]);
+
+    const btoMap = new Map(btoRows.map((r) => [r.id, r]));
+    const dpMap = new Map(dpRows.map((r) => [r.btoId, r]));
+    const groupBy = <T extends { bteId: string }>(items: T[]) => {
+      const map = new Map<string, T[]>();
+      for (const item of items) {
+        const list = map.get(item.bteId) ?? [];
+        list.push(item);
+        map.set(item.bteId, list);
+      }
+      return map;
+    };
+    const rincianMap = groupBy(rincianRows);
+    const biayaLainMap = groupBy(biayaLainRows);
+
+    const result = rows.map((row) => ({
+      ...row,
+      bto: btoMap.get(row.btoId) ?? null,
+      dp: dpMap.get(row.btoId) ?? null,
+      bteRincian: rincianMap.get(row.id) ?? [],
+      bteBiayaLain: biayaLainMap.get(row.id) ?? [],
     }));
 
-    return reply.send(ok(result));
+    return reply.send(paginated(result, page, limit, Number(totalRow?.count ?? 0)));
   });
 
   /** GET /api/bte/bto/:btoId — Dapatkan BTE */
   fastify.get('/bto/:btoId', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { btoId } = req.params as { btoId: string };
+    await assertBtoAccess(btoId, { id: req.user.sub, employeeId: req.user.employeeId, role: req.user.role });
     const result = await getBteByBtoIdService(btoId);
     return reply.send(ok(result));
   });
@@ -256,6 +290,9 @@ export default async function bteRoutes(fastify: FastifyInstance) {
   /** GET /api/bte/:id/logs — Get BTE logs */
   fastify.get('/:id/logs', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { id } = req.params as { id: string };
+    const [bteRow] = await db.select({ btoId: bte.btoId }).from(bte).where(eq(bte.id, id)).limit(1);
+    if (!bteRow) throw new AppError('BTE tidak ditemukan', 404);
+    await assertBtoAccess(bteRow.btoId, { id: req.user.sub, employeeId: req.user.employeeId, role: req.user.role });
     const rows = await db.select().from(bteApprovalLog).where(eq(bteApprovalLog.bteId, id));
     return reply.send(ok(rows));
   });

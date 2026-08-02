@@ -114,13 +114,18 @@ export async function createOrUpdateDpService(
       .where(eq(dp.id, dpRow.id));
   }
 
-  // Clear existing items and insert new ones
-  await db.delete(dpRincian).where(eq(dpRincian.dpId, dpRow.id));
+  /*
+   * Satu transaksi untuk penggantian rincian: DELETE lalu INSERT terpisah berisiko
+   * menghapus panjar lama saat INSERT gagal.
+   */
+  const dpIdForItems = dpRow.id;
+  await db.transaction(async (tx) => {
+    await tx.delete(dpRincian).where(eq(dpRincian.dpId, dpIdForItems));
 
-  if (data.rincian.length > 0) {
-    await db.insert(dpRincian).values(
+    if (data.rincian.length === 0) return;
+    await tx.insert(dpRincian).values(
       data.rincian.map((r) => ({
-        dpId: dpRow!.id,
+        dpId: dpIdForItems,
         rincianId: r.rincianId,
         rincianLabel: r.rincianLabel,
         kategori: r.kategori || 'lain_lain',
@@ -134,7 +139,7 @@ export async function createOrUpdateDpService(
         catatan: r.catatan,
       }))
     );
-  }
+  });
 
   // ─── Log ke dp_approval_log ──────────────────────────────────────────────────
   const aksiLog = isNew ? 'create' : 'update';

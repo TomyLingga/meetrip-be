@@ -9,6 +9,7 @@ import multipart from '@fastify/multipart';
 import { config } from './config/env';
 import { errorHandler } from './utils/errorHandler';
 import { expandDevelopmentLoopbackOrigins } from './utils/cors';
+import { findAccessibleBto, actorIsAdminOrSdm } from './services/access.service';
 
 import jwtPlugin from './plugins/jwt';
 import authPlugin from './plugins/auth';
@@ -43,6 +44,54 @@ const fastify = Fastify({
 // ─── Error Handler ────────────────────────────────────────────────────────────
 fastify.setErrorHandler(errorHandler);
 
+/*
+ * ─── Rate limiter in-memory ───────────────────────────────────────────────────
+ * MeeTrip sebelumnya tidak punya pembatas sama sekali, sehingga endpoint publik
+ * (kalender TV) dan endpoint auth bisa dibanjiri tanpa biaya. Bentuknya disamakan
+ * dengan portal-app-be agar perilakunya konsisten dan tanpa dependensi baru.
+ */
+type RateBucket = { count: number; resetAt: number };
+const rateBuckets = new Map<string, RateBucket>();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, bucket] of rateBuckets) {
+    if (bucket.resetAt <= now) rateBuckets.delete(key);
+  }
+}, 5 * 60_000).unref();
+
+const STRICT_PATHS = ['/api/auth/login', '/api/auth/refresh', '/api/auth/logout'];
+const PUBLIC_PATHS = ['/api/meeting/public'];
+
+function rateLimitFor(ip: string, url: string) {
+  const pathOnly = url.split('?')[0];
+  if (STRICT_PATHS.includes(pathOnly)) return { key: `${ip}:${pathOnly}`, limit: 20, windowMs: 60_000 };
+  if (PUBLIC_PATHS.includes(pathOnly)) return { key: `${ip}:${pathOnly}`, limit: 60, windowMs: 60_000 };
+  return { key: `${ip}:global`, limit: 600, windowMs: 60_000 };
+}
+
+fastify.addHook('onRequest', async (request, reply) => {
+  reply.header('X-Content-Type-Options', 'nosniff');
+  reply.header('X-Frame-Options', 'DENY');
+  reply.header('Referrer-Policy', 'no-referrer');
+  reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self)');
+  if (config.app.nodeEnv === 'production') {
+    reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+
+  const { key, limit, windowMs } = rateLimitFor(request.ip, request.url);
+  const now = Date.now();
+  const bucket = rateBuckets.get(key);
+  if (!bucket || bucket.resetAt <= now) {
+    rateBuckets.set(key, { count: 1, resetAt: now + windowMs });
+    return;
+  }
+  bucket.count += 1;
+  if (bucket.count > limit) {
+    return reply.code(429).send({ success: false, error: 'Terlalu banyak request. Silakan coba lagi nanti.' });
+  }
+});
+
 async function bootstrap() {
   // CORS & Multi-part upload setup.
   // Restrict to configured browser origins (CORS_ORIGINS) since credentials are allowed.
@@ -66,15 +115,54 @@ async function bootstrap() {
     limits: { fileSize: config.upload.maxSizeMB * 1024 * 1024 },
   });
 
-  // Serve static files (Uploaded documents)
-  await fastify.register(fastifyStatic, {
-    root: uploadDir,
-    prefix: '/uploads/',
-  });
-
   // JWT & Custom Auth Middlewares
   await fastify.register(jwtPlugin);
   await fastify.register(authPlugin);
+
+  /*
+   * ─── File unggahan ────────────────────────────────────────────────────────
+   * Dulu folder ini disajikan sebagai static publik, sehingga siapa pun yang
+   * tahu path-nya bisa mengunduh kuitansi/laporan dinas tanpa login. Sekarang
+   * @fastify/static hanya dipakai sebagai mesin `sendFile` (serve: false) dan
+   * setiap permintaan wajib lewat autentikasi + cek hak baca atas BTO terkait.
+   * Struktur path: <bto|bte>/<btoId>/<namaFile>
+   */
+  await fastify.register(fastifyStatic, {
+    root: uploadDir,
+    prefix: '/uploads/',
+    serve: false,
+  });
+
+  fastify.get('/uploads/*', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const relativePath = (req.params as Record<string, string>)['*'] ?? '';
+    const decoded = decodeURIComponent(relativePath);
+
+    // Cegah path traversal: hasil resolve wajib tetap di dalam uploadDir.
+    const absolute = path.resolve(uploadDir, decoded);
+    const rootWithSep = uploadDir.endsWith(path.sep) ? uploadDir : uploadDir + path.sep;
+    if (!absolute.startsWith(rootWithSep)) {
+      return reply.status(400).send({ success: false, error: 'Path tidak valid' });
+    }
+
+    const segments = decoded.split('/').filter(Boolean);
+    const scope = segments[0];
+    const btoId = segments[1];
+    if ((scope === 'bto' || scope === 'bte') && btoId) {
+      const allowed = await findAccessibleBto(btoId, {
+        id: req.user.sub,
+        employeeId: req.user.employeeId,
+        role: req.user.role,
+      });
+      if (!allowed) {
+        return reply.status(404).send({ success: false, error: 'Berkas tidak ditemukan' });
+      }
+    } else if (!actorIsAdminOrSdm({ id: req.user.sub, role: req.user.role })) {
+      // Berkas di luar struktur dinas (mis. aset lama) hanya untuk admin/SDM.
+      return reply.status(403).send({ success: false, error: 'Tidak berhak mengakses berkas ini' });
+    }
+
+    return reply.sendFile(decoded);
+  });
 
   // ─── Route Declarations ─────────────────────────────────────────────────────
   await fastify.register(ssoRoutes, { prefix: '/api/auth' });

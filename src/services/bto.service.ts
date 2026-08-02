@@ -9,6 +9,14 @@ import { reverseGeocode, getWilayahTipe, haversineKm, resolveEmployeePenempatan 
 import { config as appConfig } from '../config/env'
 import { getGradeIdByLevel, hitungDurasiHariMalam, validateRincianAgainstPagu } from './pagu.service'
 import { ensureApproverSpdkConfig, resolveSpdkApproverKabag } from './spdk.service'
+import { fetchWithTimeout } from '../utils/http'
+
+/*
+ * Sinkronisasi approver SPDK memanggil Portal API per SPDK. Throttle global agar
+ * polling badge (30 detik/user) tidak mengalikan beban ke server identitas.
+ */
+const APPROVER_SYNC_INTERVAL_MS = 5 * 60 * 1000
+let lastApproverSyncAt = 0
 
 function fallbackNegaraFromWilayah(wilayahTipe?: 'dalam_wilayah' | 'luar_wilayah' | 'luar_negeri' | null) {
   if (!wilayahTipe || wilayahTipe === 'luar_negeri') return null
@@ -308,15 +316,6 @@ export async function submitBtoService(id: string, actor: { id: string; nama: st
   let nomorBto = existing.nomorBto
   let tahun    = existing.tahun
   let sequence = existing.sequence
-  if (!nomorBto) {
-    tahun = now.getFullYear()
-    const seqRow = await db.execute(
-      sql`SELECT COALESCE(MAX(sequence), 0) + 1 AS next_seq FROM bto WHERE tahun = ${tahun}`
-    )
-    sequence = Number((seqRow.rows[0] as any).next_seq)
-    nomorBto = generateNomor(sequence, 'BTO', now)
-  }
-
   // Tentukan status berikutnya
   const nextStatus = existing.butuhDp ? 'ADMIN_DP_REVIEW' : 'PT_REVIEW'
 
@@ -326,20 +325,48 @@ export async function submitBtoService(id: string, actor: { id: string; nama: st
     if (tRow) transportLabel = tRow.label
   }
 
-  await db.update(bto).set({
-    status:        nextStatus,
-    nomorBto,
-    tahun,
-    sequence,
-    submittedAt:   now,
-    wilayahTipe:   wilayah,
-    tujuanAlamat:  geo.alamat || existing.tujuanNama,
-    tujuanProvinsi: geo.provinsi ?? undefined,
-    tujuanNegara:  tujuanNegara ?? undefined,
-    jarakKm:       jarakKm != null ? String(jarakKm.toFixed(2)) : undefined,
-    transportLabel,
-    updatedAt:     now,
-  }).where(eq(bto.id, id))
+  /*
+   * Penomoran + penetapan status dilakukan dalam SATU transaksi dengan advisory
+   * lock per tahun. Sebelumnya `SELECT MAX(sequence)+1` dan UPDATE berjalan terpisah
+   * tanpa lock: dua submit bersamaan membaca angka yang sama, nomor duplikat ditolak
+   * unique index, dan submit kedua berakhir 500 sambil menyisakan sequence bolong.
+   */
+  const assigned = await db.transaction(async (tx) => {
+    let finalNomor = nomorBto
+    let finalTahun = tahun
+    let finalSequence = sequence
+
+    if (!finalNomor) {
+      finalTahun = now.getFullYear()
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`bto_seq_${finalTahun}`}))`)
+      const seqRow = await tx.execute(
+        sql`SELECT COALESCE(MAX(sequence), 0) + 1 AS next_seq FROM bto WHERE tahun = ${finalTahun}`
+      )
+      finalSequence = Number((seqRow.rows[0] as any)?.next_seq ?? 1)
+      finalNomor = generateNomor(finalSequence, 'BTO', now)
+    }
+
+    await tx.update(bto).set({
+      status:        nextStatus,
+      nomorBto:      finalNomor,
+      tahun:         finalTahun,
+      sequence:      finalSequence,
+      submittedAt:   now,
+      wilayahTipe:   wilayah,
+      tujuanAlamat:  geo.alamat || existing.tujuanNama,
+      tujuanProvinsi: geo.provinsi ?? undefined,
+      tujuanNegara:  tujuanNegara ?? undefined,
+      jarakKm:       jarakKm != null ? String(jarakKm.toFixed(2)) : undefined,
+      transportLabel,
+      updatedAt:     now,
+    }).where(eq(bto.id, id))
+
+    return { nomorBto: finalNomor, tahun: finalTahun, sequence: finalSequence }
+  })
+
+  nomorBto = assigned.nomorBto
+  tahun = assigned.tahun
+  sequence = assigned.sequence
 
   if (existing.butuhDp) {
     const dpRow = await db.query.dp.findFirst({ where: eq(dp.btoId, id) })
@@ -537,7 +564,7 @@ async function isBom1Actor(actor: { id: string; employeeId?: string | null; grad
   if (hasBom1Kode) return true
 
   try {
-    const portalRes = await fetch(`${appConfig.portal.apiUrl}/api/sso/grades`, {
+    const portalRes = await fetchWithTimeout(`${appConfig.portal.apiUrl}/api/sso/grades`, {
       headers: { 'x-internal': appConfig.portal.internalToken },
     })
     if (portalRes.ok) {
@@ -589,42 +616,59 @@ export async function listBtoApprovalsService(actor: { id: string; employeeId?: 
 
   // Self-heal: SPDKs with null approverKabagId (created before the bug was fixed)
   // Try to resolve and patch them now
+  /*
+   * Diberi throttle global: perhitungan approver memanggil Portal API sampai 5 hop
+   * per SPDK, sementara endpoint ini dipolling sidebar tiap 30 detik oleh setiap
+   * user yang login. Tanpa throttle, biaya ke server identitas = jumlah SPDK
+   * menunggu × jumlah user online. Sinkronisasi tiap 5 menit lebih dari cukup.
+   */
+  const shouldRefreshApprovers = Date.now() - lastApproverSyncAt > APPROVER_SYNC_INTERVAL_MS
   const cfg = await ensureApproverSpdkConfig()
-  for (const s of kabagSpdks) {
-    if (s.approverKabagId) continue
-    // SPDK with no assigned kabag — try resolving now
-    try {
-      const [btoRow] = await db.select().from(bto).where(eq(bto.id, s.btoId)).limit(1)
-      if (!btoRow) continue
+  if (shouldRefreshApprovers) {
+    lastApproverSyncAt = Date.now()
+    for (const s of kabagSpdks) {
+      if (s.approverKabagId) continue
+      // SPDK with no assigned kabag — try resolving now
+      try {
+        const [btoRow] = await db.select().from(bto).where(eq(bto.id, s.btoId)).limit(1)
+        if (!btoRow) continue
 
-      const resolvedKabag = await resolveSpdkApproverKabag(btoRow, cfg)
-      const resolvedKabagId = resolvedKabag.id
+        const resolvedKabag = await resolveSpdkApproverKabag(btoRow, cfg)
+        const resolvedKabagId = resolvedKabag.id
+        // Jangan pernah menulis hasil resolve yang gagal: menimpa kolom ini dengan
+        // null membuat SPDK kehilangan approver-nya (dulu berarti siapa pun BOM-1
+        // bisa menyetujui). Biarkan kosong, biar penetapan dilakukan eksplisit.
+        if (!resolvedKabagId) continue
 
-      await db.update(spdk).set({
-        approverKabagId: resolvedKabagId,
-        approverKabagNama: resolvedKabag.nama,
-      }).where(eq(spdk.id, s.spdkId))
-      s.approverKabagId = resolvedKabagId
-    } catch (err) {
-      console.error('Self-heal approverKabagId failed for SPDK', s.spdkId, err)
+        await db.update(spdk).set({
+          approverKabagId: resolvedKabagId,
+          approverKabagNama: resolvedKabag.nama,
+        }).where(eq(spdk.id, s.spdkId))
+        s.approverKabagId = resolvedKabagId
+      } catch (err) {
+        console.error('Self-heal approverKabagId failed for SPDK', s.spdkId, err)
+      }
     }
-  }
 
-  for (const s of kabagSpdks.filter((row) => Boolean(row.approverKabagId))) {
-    try {
-      const [btoRow] = await db.select().from(bto).where(eq(bto.id, s.btoId)).limit(1)
-      if (!btoRow) continue
+    for (const s of kabagSpdks.filter((row) => Boolean(row.approverKabagId))) {
+      try {
+        const [btoRow] = await db.select().from(bto).where(eq(bto.id, s.btoId)).limit(1)
+        if (!btoRow) continue
 
-      const resolvedKabag = await resolveSpdkApproverKabag(btoRow, cfg)
-      if (resolvedKabag.id !== s.approverKabagId) {
+        const resolvedKabag = await resolveSpdkApproverKabag(btoRow, cfg)
+        // Hanya perbarui bila resolver benar-benar menghasilkan approver baru.
+        // Portal yang lambat/rate-limited mengembalikan id null — dulu nilai itu
+        // ikut ditulis dan mencabut approver yang sah.
+        if (!resolvedKabag.id || resolvedKabag.id === s.approverKabagId) continue
+
         await db.update(spdk).set({
           approverKabagId: resolvedKabag.id,
           approverKabagNama: resolvedKabag.nama,
         }).where(eq(spdk.id, s.spdkId))
         s.approverKabagId = resolvedKabag.id
+      } catch (err) {
+        console.error('Refresh approverKabagId failed for SPDK', s.spdkId, err)
       }
-    } catch (err) {
-      console.error('Refresh approverKabagId failed for SPDK', s.spdkId, err)
     }
   }
 

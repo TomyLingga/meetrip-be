@@ -5,6 +5,7 @@ import { refPagu, refRincianBiaya } from '../db/schema'
 import { eq, and, or, isNull, lte, gte, sql } from 'drizzle-orm'
 import { config as appConfig } from '../config/env'
 import { AppError } from '../utils/errorHandler'
+import { fetchWithTimeout } from '../utils/http'
 
 export interface PaguResult {
   rincianId:   string
@@ -209,7 +210,7 @@ export async function validateRincianAgainstPagu(params: {
 // ─── Lookup gradeId dari gradeLevel ──────────────────────────────────────────
 export async function getGradeIdByLevel(gradeLevel: number): Promise<string | null> {
   try {
-    const res = await fetch(`${appConfig.portal.apiUrl}/api/sso/grades`, {
+    const res = await fetchWithTimeout(`${appConfig.portal.apiUrl}/api/sso/grades`, {
       headers: { 'x-internal': appConfig.portal.internalToken },
     })
     if (res.ok) {

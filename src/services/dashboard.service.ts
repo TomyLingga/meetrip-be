@@ -156,7 +156,7 @@ export async function getDashboardOverview(actor: DashboardActor, requestedConte
   const scopePredicate = buildScopePredicate(context, scope)
   const actionPredicate = buildActionPredicate(context, scope)
 
-  const [metricsResult, actionResult, upcomingResult, stageResult, meetingResult] = await Promise.all([
+  const [metricsResult, actionResult, upcomingResult, stageResult, meetingResult, meetingAgendaResult] = await Promise.all([
     db.execute(sql`
       SELECT
         COUNT(*) FILTER (WHERE ${actionPredicate}) AS pending_action,
@@ -236,15 +236,56 @@ export async function getDashboardOverview(actor: DashboardActor, requestedConte
       GROUP BY b.status
       ORDER BY total DESC
     `),
+    /*
+     * Ringkasan meeting bersifat organisasi-wide (kalender ruang rapat memang
+     * dipakai bersama — endpoint TV pun publik), ditambah hitungan "milik saya"
+     * agar tetap relevan pada cakupan employee.
+     */
     db.execute(sql`
-      SELECT COUNT(*) AS total
+      SELECT
+        COUNT(*) FILTER (
+          WHERE mulai <= date_trunc('day', CURRENT_TIMESTAMP) + INTERVAL '1 day' - INTERVAL '1 millisecond'
+            AND selesai >= date_trunc('day', CURRENT_TIMESTAMP)
+        ) AS today,
+        COUNT(*) FILTER (
+          WHERE status::text <> 'CANCELLED'
+            AND mulai <= CURRENT_TIMESTAMP AND selesai >= CURRENT_TIMESTAMP
+        ) AS ongoing,
+        COUNT(*) FILTER (
+          WHERE status::text <> 'CANCELLED'
+            AND mulai >= CURRENT_TIMESTAMP
+            AND mulai < CURRENT_TIMESTAMP + INTERVAL '7 days'
+        ) AS upcoming_seven_days,
+        COUNT(*) FILTER (
+          WHERE mulai >= date_trunc('month', CURRENT_TIMESTAMP)
+            AND mulai < date_trunc('month', CURRENT_TIMESTAMP) + INTERVAL '1 month'
+        ) AS this_month,
+        COUNT(*) FILTER (
+          WHERE status::text = 'CANCELLED'
+            AND mulai >= date_trunc('month', CURRENT_TIMESTAMP)
+            AND mulai < date_trunc('month', CURRENT_TIMESTAMP) + INTERVAL '1 month'
+        ) AS cancelled_this_month,
+        COUNT(*) FILTER (
+          WHERE status::text <> 'CANCELLED'
+            AND selesai >= CURRENT_TIMESTAMP
+            AND ${identifierPredicate(sql`created_by`, scope.identifiers)}
+        ) AS mine_upcoming
       FROM meeting
-      WHERE mulai <= date_trunc('day', CURRENT_TIMESTAMP) + INTERVAL '1 day' - INTERVAL '1 millisecond'
-        AND selesai >= date_trunc('day', CURRENT_TIMESTAMP)
+    `),
+    db.execute(sql`
+      SELECT id, topik, mulai, selesai, ruang_nama, created_by, created_by_nama,
+             need_zoom, need_sound_system, status::text AS status,
+             ${identifierPredicate(sql`created_by`, scope.identifiers)} AS is_mine
+      FROM meeting
+      WHERE status::text <> 'CANCELLED' AND selesai >= CURRENT_TIMESTAMP
+      ORDER BY mulai ASC
+      LIMIT 6
     `),
   ])
 
   const metrics = metricsResult.rows[0] as Record<string, unknown> | undefined
+  const meetingRow = meetingResult.rows[0] as Record<string, unknown> | undefined
+  const meetingAgenda = meetingAgendaResult.rows.map(normalizeMeetingRow)
   return {
     context,
     contextLabel: contextLabel(context, scope.unitNama),
@@ -270,7 +311,18 @@ export async function getDashboardOverview(actor: DashboardActor, requestedConte
       overdueActions: numberValue(metrics?.overdue_actions),
       completedThisMonth: numberValue(metrics?.completed_this_month),
       oldestPendingHours: numberValue(metrics?.oldest_pending_hours),
-      meetingsToday: numberValue((meetingResult.rows[0] as Record<string, unknown> | undefined)?.total),
+      meetingsToday: numberValue(meetingRow?.today),
+    },
+    // ── Blok meeting (real-time, tidak mengikuti filter bulan) ──
+    meetings: {
+      today: numberValue(meetingRow?.today),
+      ongoing: numberValue(meetingRow?.ongoing),
+      upcomingSevenDays: numberValue(meetingRow?.upcoming_seven_days),
+      thisMonth: numberValue(meetingRow?.this_month),
+      cancelledThisMonth: numberValue(meetingRow?.cancelled_this_month),
+      mineUpcoming: numberValue(meetingRow?.mine_upcoming),
+      next: meetingAgenda[0] ?? null,
+      agenda: meetingAgenda,
     },
     actionQueue: actionResult.rows.map(normalizeTripRow),
     upcomingTrips: upcomingResult.rows.map(normalizeTripRow),
@@ -278,6 +330,22 @@ export async function getDashboardOverview(actor: DashboardActor, requestedConte
       status: String((row as Record<string, unknown>).status ?? ''),
       total: numberValue((row as Record<string, unknown>).total),
     })),
+  }
+}
+
+function normalizeMeetingRow(row: unknown) {
+  const item = row as Record<string, unknown>
+  return {
+    id: String(item.id),
+    topik: String(item.topik ?? ''),
+    mulai: item.mulai,
+    selesai: item.selesai,
+    ruangNama: item.ruang_nama ? String(item.ruang_nama) : null,
+    createdByNama: item.created_by_nama ? String(item.created_by_nama) : null,
+    needZoom: Boolean(item.need_zoom),
+    needSoundSystem: Boolean(item.need_sound_system),
+    status: String(item.status ?? 'SCHEDULED'),
+    isMine: Boolean(item.is_mine),
   }
 }
 
@@ -319,7 +387,8 @@ export async function getDashboardAnalytics(
       AND b.est_berangkat < ${end}
   `
 
-  const [financeResult, dailyResult, statusResult, weeklyResult, categoryResult, unitResult, decisionResult, cashResult, budgetResult] = await Promise.all([
+  const [financeResult, dailyResult, statusResult, weeklyResult, categoryResult, unitResult, decisionResult, cashResult, budgetResult,
+         meetingSummaryResult, meetingDailyResult, meetingRoomResult, meetingStatusResult, meetingHostResult, meetingParticipantResult] = await Promise.all([
     db.execute(sql`
       WITH scoped_bto AS (${scopedBto})
       SELECT
@@ -434,6 +503,67 @@ export async function getDashboardAnalytics(
     context === 'company'
       ? db.execute(sql`SELECT amount_idr, notes, updated_at, updated_by_nama FROM travel_monthly_budget WHERE year = ${year} AND month = ${month} LIMIT 1`)
       : Promise.resolve({ rows: [] } as { rows: unknown[] }),
+    /*
+     * ── Statistik meeting bulan terpilih ──
+     * Ikut month-year picker yang sama dengan statistik dinas. Status dihitung
+     * dari waktu (bukan hanya kolom status) supaya bulan lampau terbaca "selesai"
+     * meski baris lama tidak pernah di-update.
+     */
+    db.execute(sql`
+      WITH scoped_meeting AS (
+        SELECT m.*, EXTRACT(EPOCH FROM (m.selesai - m.mulai)) / 60 AS durasi_menit
+        FROM meeting m
+        WHERE m.mulai >= ${start} AND m.mulai < ${end}
+      )
+      SELECT
+        COUNT(*) AS total,
+        COUNT(*) FILTER (WHERE status::text = 'CANCELLED') AS cancelled,
+        COUNT(*) FILTER (WHERE need_zoom) AS with_zoom,
+        COUNT(*) FILTER (WHERE ruang_id IS NOT NULL) AS with_room,
+        COUNT(*) FILTER (WHERE need_sound_system) AS with_sound,
+        COALESCE(SUM(durasi_menit) FILTER (WHERE status::text <> 'CANCELLED'), 0) AS total_menit,
+        COALESCE(AVG(durasi_menit) FILTER (WHERE status::text <> 'CANCELLED'), 0) AS avg_menit,
+        COUNT(DISTINCT created_by) AS penyelenggara,
+        COUNT(*) FILTER (WHERE ${identifierPredicate(sql`created_by`, scope.identifiers)}) AS mine
+      FROM scoped_meeting
+    `),
+    db.execute(sql`
+      SELECT EXTRACT(DAY FROM mulai)::int AS day, COUNT(*) AS total
+      FROM meeting WHERE mulai >= ${start} AND mulai < ${end} AND status::text <> 'CANCELLED'
+      GROUP BY day ORDER BY day
+    `),
+    db.execute(sql`
+      SELECT COALESCE(NULLIF(ruang_nama, ''), 'Tanpa ruang (virtual)') AS ruang,
+             COUNT(*) AS total,
+             COALESCE(SUM(EXTRACT(EPOCH FROM (selesai - mulai)) / 3600), 0) AS jam
+      FROM meeting WHERE mulai >= ${start} AND mulai < ${end} AND status::text <> 'CANCELLED'
+      GROUP BY ruang ORDER BY total DESC LIMIT 7
+    `),
+    db.execute(sql`
+      SELECT
+        CASE
+          WHEN status::text = 'CANCELLED' THEN 'CANCELLED'
+          WHEN selesai < CURRENT_TIMESTAMP THEN 'DONE'
+          WHEN mulai <= CURRENT_TIMESTAMP AND selesai >= CURRENT_TIMESTAMP THEN 'ONGOING'
+          ELSE 'SCHEDULED'
+        END AS status,
+        COUNT(*) AS total
+      FROM meeting WHERE mulai >= ${start} AND mulai < ${end}
+      GROUP BY 1 ORDER BY total DESC
+    `),
+    db.execute(sql`
+      SELECT COALESCE(NULLIF(m.created_by_nama, ''), 'Tanpa nama') AS nama, COUNT(*) AS total
+      FROM meeting m WHERE m.mulai >= ${start} AND m.mulai < ${end} AND m.status::text <> 'CANCELLED'
+      GROUP BY nama ORDER BY total DESC LIMIT 5
+    `),
+    db.execute(sql`
+      SELECT
+        COUNT(*) AS total,
+        COUNT(*) FILTER (WHERE p.is_external) AS eksternal
+      FROM meeting_partisipan p
+      JOIN meeting m ON m.id = p.meeting_id
+      WHERE m.mulai >= ${start} AND m.mulai < ${end} AND m.status::text <> 'CANCELLED'
+    `),
   ])
 
   const financeRow = financeResult.rows[0] as Record<string, unknown> | undefined
@@ -442,6 +572,9 @@ export async function getDashboardAnalytics(
   const exposure = numberValue(financeRow?.exposure)
   const daysInMonth = new Date(year, month, 0).getDate()
   const dailyMap = new Map(dailyResult.rows.map((row) => [numberValue((row as Record<string, unknown>).day), numberValue((row as Record<string, unknown>).total)]))
+  const meetingSummary = meetingSummaryResult.rows[0] as Record<string, unknown> | undefined
+  const meetingParticipant = meetingParticipantResult.rows[0] as Record<string, unknown> | undefined
+  const meetingDailyMap = new Map(meetingDailyResult.rows.map((row) => [numberValue((row as Record<string, unknown>).day), numberValue((row as Record<string, unknown>).total)]))
   const weekMap = new Map(weeklyResult.rows.map((row) => [numberValue((row as Record<string, unknown>).week), row as Record<string, unknown>]))
 
   return {
@@ -491,5 +624,36 @@ export async function getDashboardAnalytics(
       action: String((row as Record<string, unknown>).action ?? ''),
       total: numberValue((row as Record<string, unknown>).total),
     })),
+    // ── Statistik meeting untuk bulan yang sama ──
+    meetings: {
+      total: numberValue(meetingSummary?.total),
+      cancelled: numberValue(meetingSummary?.cancelled),
+      withZoom: numberValue(meetingSummary?.with_zoom),
+      withRoom: numberValue(meetingSummary?.with_room),
+      withSoundSystem: numberValue(meetingSummary?.with_sound),
+      totalMinutes: Math.round(numberValue(meetingSummary?.total_menit)),
+      avgMinutes: Math.round(numberValue(meetingSummary?.avg_menit)),
+      hostCount: numberValue(meetingSummary?.penyelenggara),
+      mine: numberValue(meetingSummary?.mine),
+      participants: numberValue(meetingParticipant?.total),
+      externalParticipants: numberValue(meetingParticipant?.eksternal),
+      dailyVolume: Array.from({ length: daysInMonth }, (_, index) => ({
+        day: index + 1,
+        total: meetingDailyMap.get(index + 1) ?? 0,
+      })),
+      roomBreakdown: meetingRoomResult.rows.map((row) => ({
+        room: String((row as Record<string, unknown>).ruang ?? 'Tanpa ruang'),
+        total: numberValue((row as Record<string, unknown>).total),
+        hours: Math.round(numberValue((row as Record<string, unknown>).jam) * 10) / 10,
+      })),
+      statusDistribution: meetingStatusResult.rows.map((row) => ({
+        status: String((row as Record<string, unknown>).status ?? ''),
+        total: numberValue((row as Record<string, unknown>).total),
+      })),
+      topHosts: meetingHostResult.rows.map((row) => ({
+        nama: String((row as Record<string, unknown>).nama ?? '-'),
+        total: numberValue((row as Record<string, unknown>).total),
+      })),
+    },
   }
 }

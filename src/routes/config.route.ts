@@ -7,6 +7,7 @@ import { and, eq } from 'drizzle-orm';
 import { ok } from '../utils/response';
 import { AppError } from '../utils/errorHandler';
 import { config } from '../config/env';
+import { fetchWithTimeout } from '../utils/http';
 
 const ptConfigSchema = z.object({
   mode: z.enum(['grade_based', 'fixed_person']),
@@ -157,7 +158,7 @@ export default async function configRoutes(fastify: FastifyInstance) {
     const portalUrl = `${config.portal.apiUrl}/api/sso/employees?limit=500`;
     let employees: any[] = [];
     try {
-      const res = await fetch(portalUrl, {
+      const res = await fetchWithTimeout(portalUrl, {
         headers: { 'x-internal': config.portal.internalToken },
       });
       if (res.ok) {

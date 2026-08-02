@@ -5,6 +5,7 @@ import { config } from '../config/env'
 import { db } from '../db/connection'
 import { localUserCache } from '../db/schema'
 import { eq } from 'drizzle-orm'
+import { fetchWithTimeout } from '../utils/http'
 
 interface GeoResult {
   alamat:   string
@@ -26,7 +27,7 @@ export async function reverseGeocode(lat: number, lng: number): Promise<GeoResul
   if (config.googleMaps.apiKey) {
     try {
       const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${config.googleMaps.apiKey}&language=id`
-      const res  = await fetch(url)
+      const res  = await fetchWithTimeout(url)
       const json = await res.json() as {
         status: string
         results: Array<{ formatted_address: string; address_components: Array<{ long_name: string; types: string[] }> }>
@@ -53,7 +54,7 @@ export async function reverseGeocode(lat: number, lng: number): Promise<GeoResul
   // 2. Fallback menggunakan OpenStreetMap Nominatim (Gratis, tanpa API Key)
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=id`
-    const res = await fetch(url, { headers: { 'User-Agent': 'MeeTrip-SSO/1.0' } })
+    const res = await fetchWithTimeout(url, { headers: { 'User-Agent': 'MeeTrip-SSO/1.0' } })
     if (res.ok) {
       const json = await res.json() as any
       if (json && json.address) {
@@ -120,7 +121,7 @@ export async function resolveEmployeePenempatan(portalUserId: string): Promise<{
 
   if (userCache?.employeeId) {
     try {
-      const portalRes = await fetch(`${config.portal.apiUrl}/api/sso/employees?id=${userCache.employeeId}`, {
+      const portalRes = await fetchWithTimeout(`${config.portal.apiUrl}/api/sso/employees?id=${userCache.employeeId}`, {
         headers: { 'x-internal': config.portal.internalToken },
       })
       if (portalRes.ok) {

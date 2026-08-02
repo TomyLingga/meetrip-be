@@ -42,7 +42,14 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
   });
 
   /** GET /api/dashboard/summary — Dashboard summary widgets */
-  fastify.get('/summary', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+  /*
+   * Endpoint agregat berikut mengembalikan angka lingkup PERUSAHAAN (total dinas,
+   * proyeksi & realisasi biaya, sebaran status seluruh organisasi). Sebelumnya
+   * hanya `authenticate`, sehingga setiap karyawan bisa membaca belanja dinas
+   * perusahaan. Dashboard per-karyawan memakai /overview dan /analytics-v2 yang
+   * sudah men-scope hasil sesuai cakupan (company/employee/assigner/kabag).
+   */
+  fastify.get('/summary', { preHandler: [fastify.authenticateSdm] }, async (req, reply) => {
     const query = z.object({
       year: z.coerce.number().int().min(2020).max(2100).optional(),
       month: z.coerce.number().int().min(1).max(12).optional(),
@@ -222,7 +229,7 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
   });
 
   /** GET /api/dashboard/analytics - Statistik bulanan, terpisah dari ringkasan operasional real-time. */
-  fastify.get('/analytics', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+  fastify.get('/analytics', { preHandler: [fastify.authenticateSdm] }, async (req, reply) => {
     const query = z.object({
       year: z.coerce.number().int().min(2020).max(2100).optional(),
       month: z.coerce.number().int().min(1).max(12).optional(),
@@ -298,7 +305,7 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
   });
 
   /** GET /api/dashboard/karyawan-dinas — List karyawan yang sedang/akan dinas pada range tanggal tertentu */
-  fastify.get('/karyawan-dinas', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+  fastify.get('/karyawan-dinas', { preHandler: [fastify.authenticateSdm] }, async (req, reply) => {
     const q = req.query as { dateFrom?: string; dateTo?: string };
     const dateFrom = q.dateFrom ? new Date(q.dateFrom) : new Date();
     dateFrom.setHours(0,0,0,0);
@@ -328,7 +335,7 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
   });
 
   /** GET /api/dashboard/proyeksi-biaya — Total biaya perjalanan dinas yang direncanakan */
-  fastify.get('/proyeksi-biaya', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+  fastify.get('/proyeksi-biaya', { preHandler: [fastify.authenticateSdm] }, async (req, reply) => {
     // Sum total_idr dari BTO yang berstatus DP APPROVED atau diajukan (rencana awal)
     // Kita bisa ambil sum total_idr dari table dp di mana BTO belum selesai
     const result = await db.execute(
@@ -341,7 +348,7 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
   });
 
   /** GET /api/dashboard/realisasi-biaya — Total biaya perjalanan dinas terealisasi */
-  fastify.get('/realisasi-biaya', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+  fastify.get('/realisasi-biaya', { preHandler: [fastify.authenticateSdm] }, async (req, reply) => {
     // Sum total_idr dari BTE yang berstatus PAID atau APPROVED
     const result = await db.execute(
       sql`SELECT COALESCE(SUM(total_idr), 0) AS total FROM bte 
@@ -352,7 +359,7 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
   });
 
   /** GET /api/dashboard/export-excel — Download Excel */
-  fastify.get('/export-excel', { preHandler: [fastify.authenticateAdmin] }, async (req, reply) => {
+  fastify.get('/export-excel', { preHandler: [fastify.authenticateSdm] }, async (req, reply) => {
     const q = req.query as any;
     // Guard against invalid date strings producing an Invalid Date passed to the query.
     const toValidDate = (v: unknown): Date | undefined => {
@@ -361,7 +368,10 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
       return Number.isNaN(d.getTime()) ? undefined : d;
     };
     const dateFrom = toValidDate(q.dateFrom);
-    const dateTo = toValidDate(q.dateTo);
+    let dateTo = toValidDate(q.dateTo);
+    if (dateTo && typeof q.dateTo === 'string' && !q.dateTo.includes('T')) {
+      dateTo.setHours(23, 59, 59, 999);
+    }
     const status = q.status || undefined;
 
     const buffer = await exportBtoExcelService({ dateFrom, dateTo, status });

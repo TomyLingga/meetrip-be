@@ -31,10 +31,24 @@ declare module 'fastify' {
 }
 
 export default fp(async function authPlugin(fastify: FastifyInstance) {
+  /*
+   * Token via query string hanya diterima untuk route render dokumen (PDF/HTML)
+   * dan hanya untuk GET. Dulu ini berlaku di SEMUA endpoint, sehingga
+   * `?token=<JWT>` bisa dipakai untuk aksi tulis seperti DELETE master data —
+   * padahal URL lengkap tercatat di log server, riwayat browser, dan Referer.
+   * Frontend sekarang memakai header Authorization + blob URL.
+   */
+  const QUERY_TOKEN_PREFIXES = ['/api/documents', '/api/document']
+
   function extractQueryToken(request: FastifyRequest) {
-    if (!request.headers.authorization && (request.query as any)?.token) {
-      request.headers.authorization = `Bearer ${(request.query as any).token}`;
-    }
+    if (request.headers.authorization) return
+    const token = (request.query as any)?.token
+    if (!token) return
+    const url = request.url.split('?')[0]
+    const isDocumentRead =
+      request.method === 'GET' && QUERY_TOKEN_PREFIXES.some((prefix) => url.startsWith(prefix))
+    if (!isDocumentRead) return
+    request.headers.authorization = `Bearer ${token}`
   }
 
   fastify.decorate('authenticate', async function (

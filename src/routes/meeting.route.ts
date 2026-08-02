@@ -8,11 +8,12 @@ import {
   updateMeetingService,
 } from '../services/meeting.service';
 import { db } from '../db/connection';
-import { meeting } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { localUserCache, meeting } from '../db/schema';
+import { eq, inArray } from 'drizzle-orm';
 import { ok } from '../utils/response';
 import { AppError } from '../utils/errorHandler';
 import { config } from '../config/env';
+import { fetchWithTimeout } from '../utils/http';
 
 const meetingCreateSchema = z.object({
   topik: z.string().min(1).max(500),
@@ -63,7 +64,7 @@ export default async function meetingRoutes(fastify: FastifyInstance) {
     const portalUrl = `${config.portal.apiUrl}/api/sso/employees?limit=500`;
     let employees: any[] = [];
     try {
-      const res = await fetch(portalUrl, {
+      const res = await fetchWithTimeout(portalUrl, {
         headers: { 'x-internal': config.portal.internalToken },
       });
       if (res.ok) {
@@ -87,37 +88,43 @@ export default async function meetingRoutes(fastify: FastifyInstance) {
     return reply.send(ok(mapped));
   });
 
+  /*
+   * Kalender publik untuk layar TV: tanpa autentikasi, jadi dijaga ketat —
+   *  1. rentang tanggal dibatasi maksimum 60 hari (default 30 hari ke depan)
+   *  2. kolom diproyeksikan; `catatan`, `zoomLink`, dan id pembuat TIDAK dikirim
+   *  3. nama pembuat diambil dari cache lokal, bukan memanggil Portal 500-employee
+   *     pada setiap hit (dulu satu request anonim = satu query 227 baris ke server
+   *     identitas milik seluruh perusahaan)
+   */
   fastify.get('/public', async (req, reply) => {
     const q = meetingListQuerySchema.parse(req.query);
-    const result = await listMeetingService({
-      dateFrom: q.dateFrom ? new Date(q.dateFrom) : undefined,
-      dateTo: q.dateTo ? new Date(q.dateTo) : undefined,
-      ruangId: q.ruangId,
-    });
+    const now = new Date();
+    const dateFrom = q.dateFrom ? new Date(q.dateFrom) : new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const requestedTo = q.dateTo ? new Date(q.dateTo) : new Date(dateFrom.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const maxTo = new Date(dateFrom.getTime() + 60 * 24 * 60 * 60 * 1000);
+    const dateTo = requestedTo > maxTo ? maxTo : requestedTo;
 
-    const portalUrl = `${config.portal.apiUrl}/api/sso/employees?limit=500`;
-    let employees: any[] = [];
-    try {
-      const res = await fetch(portalUrl, {
-        headers: { 'x-internal': config.portal.internalToken },
-      });
-      if (res.ok) {
-        const body = await res.json() as { data: any[] };
-        employees = body.data ?? [];
-      }
-    } catch (err) {
-      fastify.log.warn({ err }, 'Gagal mengambil data employee dari portal untuk list meeting public');
-    }
+    const result = await listMeetingService({ dateFrom, dateTo, ruangId: q.ruangId, limit: 300 });
 
-    const employeeMap = new Map(employees.map(e => [e.id, e]));
-    const mapped = result.map((m: any) => {
-      const emp = employeeMap.get(m.createdBy);
-      return {
-        ...m,
-        createdByNama: emp?.namaLengkap ?? m.createdByNama,
-        createdByJabatan: emp?.jabatan ?? null,
-      };
-    });
+    const creatorIds = Array.from(new Set(result.map((m) => m.createdBy).filter(Boolean)));
+    const creators = creatorIds.length
+      ? await db.select({ portalUserId: localUserCache.portalUserId, nama: localUserCache.nama })
+          .from(localUserCache)
+          .where(inArray(localUserCache.portalUserId, creatorIds))
+      : [];
+    const creatorMap = new Map(creators.map((c) => [c.portalUserId, c.nama]));
+
+    const mapped = result.map((m) => ({
+      id: m.id,
+      topik: m.topik,
+      mulai: m.mulai,
+      selesai: m.selesai,
+      ruangNama: m.ruangNama,
+      status: m.status,
+      needSoundSystem: m.needSoundSystem,
+      needZoom: m.needZoom,
+      createdByNama: creatorMap.get(m.createdBy) ?? m.createdByNama,
+    }));
 
     return reply.send(ok(mapped));
   });

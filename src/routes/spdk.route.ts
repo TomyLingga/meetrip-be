@@ -16,6 +16,7 @@ import { spdk, spdkApprovalLog } from '../db/schema';
 import { eq, desc, and, gte, lte, sql } from 'drizzle-orm';
 import { ok, paginated, parsePagination } from '../utils/response';
 import { AppError } from '../utils/errorHandler';
+import { assertBtoAccess } from '../services/access.service';
 
 const attendSchema = z.object({
   latitude: z.number().nullable(),
@@ -36,10 +37,26 @@ export default async function spdkRoutes(fastify: FastifyInstance) {
   /** POST /api/spdk/bto/:btoId — Issue SPDK (Admin only) */
   fastify.post('/bto/:btoId', { preHandler: [fastify.authenticateAdmin] }, async (req, reply) => {
     const { btoId } = req.params as { btoId: string };
+    /*
+     * btoUpdateData dulu bertipe z.any() dan diteruskan mentah ke
+     * db.update(bto).set(...) — artinya admin (atau sesi admin yang dibajak) bisa
+     * menulis kolom apa pun termasuk `status`, `employeeId`, dan `nomorBto`.
+     * Sekarang hanya field koreksi administratif yang diizinkan.
+     */
     const { catatanAdmin, nomorSpdk, btoUpdateData } = z.object({
       catatanAdmin: z.string().optional(),
       nomorSpdk: z.string().optional(),
-      btoUpdateData: z.any().optional(),
+      btoUpdateData: z.object({
+        estBerangkat: z.string().optional(),
+        estKembali: z.string().optional(),
+        transportId: z.string().uuid().optional(),
+        transportLabel: z.string().max(100).optional(),
+        kepentingan: z.string().optional(),
+        barang: z.string().nullable().optional(),
+        tujuanNama: z.string().max(300).optional(),
+        tujuanAlamat: z.string().nullable().optional(),
+        estimasiWaktuMenit: z.number().int().nonnegative().optional(),
+      }).strict().optional(),
     }).parse(req.body);
     const actor = { id: req.user.sub, employeeId: req.user.employeeId, gradeLevel: req.user.gradeLevel, nama: req.user.nama || '' };
     const result = await issueSpdkService(btoId, actor, catatanAdmin, nomorSpdk, btoUpdateData);
@@ -58,7 +75,7 @@ export default async function spdkRoutes(fastify: FastifyInstance) {
   });
 
   /** GET /api/spdk — List SPDK (Admin/SDM) */
-  fastify.get('/', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+  fastify.get('/', { preHandler: [fastify.authenticateSdm] }, async (req, reply) => {
     const q = req.query as any;
     const { page, limit } = parsePagination(q);
     const offset = (page - 1) * limit;
@@ -83,6 +100,7 @@ export default async function spdkRoutes(fastify: FastifyInstance) {
   /** GET /api/spdk/bto/:btoId — Get SPDK by BTO ID */
   fastify.get('/bto/:btoId', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { btoId } = req.params as { btoId: string };
+    await assertBtoAccess(btoId, { id: req.user.sub, employeeId: req.user.employeeId, role: req.user.role });
     const [row] = await db.select().from(spdk).where(eq(spdk.btoId, btoId)).limit(1);
     if (!row) throw new AppError('SPDK tidak ditemukan', 404);
     return reply.send(ok(row));
@@ -93,6 +111,7 @@ export default async function spdkRoutes(fastify: FastifyInstance) {
     const { id } = req.params as { id: string };
     const [row] = await db.select().from(spdk).where(eq(spdk.id, id)).limit(1);
     if (!row) throw new AppError('SPDK tidak ditemukan', 404);
+    await assertBtoAccess(row.btoId, { id: req.user.sub, employeeId: req.user.employeeId, role: req.user.role });
 
     const logs = await db.select().from(spdkApprovalLog).where(eq(spdkApprovalLog.spdkId, id));
     return reply.send(ok({ ...row, approvalLogs: logs }));

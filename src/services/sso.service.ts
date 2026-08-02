@@ -9,6 +9,7 @@ import { reverseGeocode } from './geocoding.service'
 import crypto from 'crypto'
 import type { FastifyInstance } from 'fastify'
 import type { JwtPayload } from '../plugins/auth'
+import { fetchWithTimeout } from '../utils/http'
 
 // ─── Tipe data user dari portal (response /api/sso/verify) ───────────────────
 interface PortalUser {
@@ -61,7 +62,7 @@ export async function loginSsoService(
   fastify: FastifyInstance,
 ) {
   // 1. Verifikasi token ke portal
-  const portalRes = await fetch(`${config.portal.apiUrl}/api/sso/verify`, {
+  const portalRes = await fetchWithTimeout(`${config.portal.apiUrl}/api/sso/verify`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token: ssoToken, app_id: appId }),
