@@ -56,6 +56,10 @@ export default async function spdkRoutes(fastify: FastifyInstance) {
         tujuanNama: z.string().max(300).optional(),
         tujuanAlamat: z.string().nullable().optional(),
         estimasiWaktuMenit: z.number().int().nonnegative().optional(),
+        pemberiTugasId: z.string().nullable().optional(),
+        pemberiTugasNama: z.string().nullable().optional(),
+        isButuhDp: z.boolean().optional(),
+        butuhDp: z.boolean().optional(),
       }).strict().optional(),
     }).parse(req.body);
     const actor = { id: req.user.sub, employeeId: req.user.employeeId, gradeLevel: req.user.gradeLevel, nama: req.user.nama || '' };

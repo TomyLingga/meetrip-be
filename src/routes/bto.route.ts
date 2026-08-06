@@ -42,6 +42,7 @@ const btoCreateSchema = z.object({
   estKembali: z.string().datetime(),
   estimasiWaktuMenit: z.number().int().optional(),
   butuhDp: z.boolean(),
+  isButuhDp: z.boolean().optional(),
   pemberiTugasId: z.string().optional(),
   pemberiTugasNama: z.string().optional(),
   barang: z.string().nullable().optional(),
@@ -297,8 +298,10 @@ export default async function btoRoutes(fastify: FastifyInstance) {
     const { id } = req.params as { id: string }
     const isAdmin = (req.user.role ?? '').split(',').some(r => ['super_admin', 'admin'].includes(r))
     const data = btoCreateSchema.partial().parse(req.body)
+    const { isButuhDp, ...restData } = data
     const updateData: Partial<typeof bto.$inferInsert> = {
-      ...data,
+      ...restData,
+      butuhDp: isButuhDp ?? data.butuhDp,
       tujuanLat: data.tujuanLat != null ? String(data.tujuanLat) : undefined,
       tujuanLng: data.tujuanLng != null ? String(data.tujuanLng) : undefined,
       jarakKm: data.jarakKm !== undefined ? (data.jarakKm != null ? String(data.jarakKm) : null) : undefined,

@@ -174,9 +174,9 @@ export default async function bteRoutes(fastify: FastifyInstance) {
       }).where(eq(bte.id, bteRow.id));
     }
 
-    // Update BTO status to REPORT_UPLOADED if BTO is currently ATTENDED
+    // Update BTO status to BTE_DRAFT if BTO is currently ATTENDED
     if (btoRow.status === 'ATTENDED') {
-      await db.update(bto).set({ status: 'REPORT_UPLOADED', updatedAt: new Date() }).where(eq(bto.id, btoId));
+      await db.update(bto).set({ status: 'BTE_DRAFT', updatedAt: new Date() }).where(eq(bto.id, btoId));
     }
 
     return reply.send(ok({ path: fileRelativePath, nama: data.filename }));
