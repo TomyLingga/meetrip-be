@@ -253,7 +253,7 @@ export default async function btoRoutes(fastify: FastifyInstance) {
     }
 
     // Ambil lokasi penempatan RESMI user (selalu di-refresh dari Portal), acuan utama perhitungan wilayah
-    const { lat: pLat, lng: pLng, provinsi: pProv, nama: penempatanNama } = await resolveEmployeePenempatan(req.user.sub)
+    const { lat: pLat, lng: pLng, provinsi: pProv, negara: pNegara, countryCode: pCountryCode, nama: penempatanNama } = await resolveEmployeePenempatan(req.user.sub)
 
     // Reverse geocode target coordinate
     const geo = await reverseGeocode(lat, lng)
@@ -263,7 +263,7 @@ export default async function btoRoutes(fastify: FastifyInstance) {
       jarakKm = haversineKm(pLat, pLng, lat, lng)
     }
 
-    const wilayahTipe = getWilayahTipe(pProv, geo.provinsi, geo.negara)
+    const wilayahTipe = getWilayahTipe(pProv, geo.provinsi, geo.negara, lat, lng, geo.countryCode, pNegara, pCountryCode)
 
     return reply.send(ok({
       jarakKm: Number(jarakKm.toFixed(2)),
@@ -605,17 +605,21 @@ export default async function btoRoutes(fastify: FastifyInstance) {
     let jarakKm: number | null = null
 
     // Ambil lokasi penempatan RESMI user (selalu di-refresh dari Portal), acuan utama perhitungan wilayah & jarak
-    const { lat: penempatanLat, lng: penempatanLng, provinsi: userProvinsi } = await resolveEmployeePenempatan(req.user.sub)
+    const { lat: penempatanLat, lng: penempatanLng, provinsi: userProvinsi, negara: userNegara, countryCode: userCountryCode } = await resolveEmployeePenempatan(req.user.sub)
 
     if (tujuanLat != null && tujuanLng != null && Number.isFinite(Number(tujuanLat)) && Number.isFinite(Number(tujuanLng))) {
-      // Lokasi tujuan adalah sumber kebenaran. Jangan gunakan nilai wilayah dari
-      // form karena nilai preview lama bisa berasal dari geocoding yang gagal.
-      const geo = await reverseGeocode(Number(tujuanLat || 0), Number(tujuanLng || 0)).catch(() => ({ provinsi: null, negara: 'Indonesia', alamat: '' }))
+      // Calculate region classification from target coordinates
+      const geo = await reverseGeocode(Number(tujuanLat || 0), Number(tujuanLng || 0)).catch(() => ({ provinsi: null, negara: null, countryCode: null, alamat: '' }))
 
       wilayah = getWilayahTipe(
         userProvinsi,
         geo.provinsi,
         geo.negara,
+        Number(tujuanLat || 0),
+        Number(tujuanLng || 0),
+        geo.countryCode,
+        userNegara,
+        userCountryCode,
       )
     }
 

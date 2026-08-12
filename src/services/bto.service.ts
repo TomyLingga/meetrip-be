@@ -46,6 +46,7 @@ async function resolveTujuanGeo(
       alamat: geo.alamat || fallback?.alamat || fallback?.tujuanNama || '',
       provinsi: geo.provinsi ?? fallback?.provinsi ?? null,
       negara: geo.negara ?? fallback?.negara ?? fallbackNegaraFromWilayah(wilayahTipe),
+      countryCode: geo.countryCode ?? null,
     }
   } catch (err) {
     console.error('Gagal reverse geocode tujuan BTO:', err)
@@ -53,6 +54,7 @@ async function resolveTujuanGeo(
       alamat: fallback?.alamat || fallback?.tujuanNama || '',
       provinsi: fallback?.provinsi ?? null,
       negara: fallback?.negara ?? fallbackNegaraFromWilayah(wilayahTipe),
+      countryCode: null,
     }
   }
 }
@@ -246,19 +248,21 @@ export async function submitBtoService(id: string, actor: { id: string; nama: st
   const userCache = await db.query.localUserCache.findFirst({
     where: eq(localUserCache.portalUserId, actor.id),
   })
-  const { lat: penempatanLat, lng: penempatanLng, provinsi: userProvinsi } = await resolveEmployeePenempatan(actor.id)
+  const { lat: penempatanLat, lng: penempatanLng, provinsi: userProvinsi, negara: userNegara, countryCode: userCountryCode } = await resolveEmployeePenempatan(actor.id)
 
   const tujuanNegara = geo.negara ?? fallbackNegaraFromWilayah(existing.wilayahTipe)
-  // Wilayah final selalu dihitung kembali dari koordinat dan provinsi. Nilai pada
-  // draft hanya bersifat preview agar hasil lama yang keliru tidak ikut terkunci.
   let wilayah = getWilayahTipe(
     userProvinsi,
     geo.provinsi,
     tujuanNegara,
+    Number(existing.tujuanLat),
+    Number(existing.tujuanLng),
+    geo.countryCode,
+    userNegara,
+    userCountryCode,
   )
-  // Fail-safe: bila draft sudah menandai luar_negeri tetapi reverse-geocode gagal
-  // mengembalikan data negara (geo.negara null), jangan turunkan ke luar_wilayah —
-  // itu membuat pengecekan pagu memakai plafon domestik untuk perjalanan luar negeri.
+
+  // Preserve luar_negeri classification if reverse geocoding is unavailable during submit
   if (existing.wilayahTipe === 'luar_negeri' && geo.negara == null) {
     wilayah = 'luar_negeri'
   }
