@@ -7,7 +7,7 @@ import { AppError } from '../utils/errorHandler';
 import { assertBtoAccess } from '../services/access.service';
 
 const dpUpsertSchema = z.object({
-  exchangeRateUsd: z.number().optional(),
+  exchangeRateUsd: z.number().nullable().optional(),
   rincian: z.array(
     z.object({
       rincianId: z.string().uuid(),

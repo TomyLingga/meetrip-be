@@ -17,7 +17,7 @@ const bteUpsertSchema = z.object({
   jamBerangkat: z.string().optional(),
   tglKembali: z.string().optional(),
   jamKembali: z.string().optional(),
-  exchangeRateUsd: z.number().optional(),
+  exchangeRateUsd: z.number().nullable().optional(),
   rincian: z.array(
     z.object({
       rincianId: z.string().uuid(),

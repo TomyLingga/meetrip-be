@@ -23,7 +23,7 @@ export async function createOrUpdateDpService(
   actor: { id: string; nama: string },
   isAdmin: boolean,
   data: {
-    exchangeRateUsd?: number;
+    exchangeRateUsd?: number | null;
     rincian: Array<{
       rincianId: string;
       rincianLabel?: string;

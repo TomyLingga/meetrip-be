@@ -36,7 +36,7 @@ export async function createOrUpdateBteService(
     jamBerangkat?: string;
     tglKembali?: Date;
     jamKembali?: string;
-    exchangeRateUsd?: number;
+    exchangeRateUsd?: number | null;
     rincian: Array<{
       rincianId: string;
       rincianLabel?: string;
