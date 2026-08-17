@@ -19,11 +19,13 @@ export const pool = new Pool({
   password: config.db.password,
   // Aktifkan enkripsi dengan DB_SSL=require pada deployment non-lokal.
   ssl: process.env.DB_SSL === 'require' ? { rejectUnauthorized: false } : undefined,
-  max: 15,
-  connectionTimeoutMillis: 8_000,
+  max: 20,
+  connectionTimeoutMillis: 10_000,
   idleTimeoutMillis: 30_000,
   statement_timeout: 20_000,
   query_timeout: 20_000,
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10_000,
 })
 
 pool.on('error', (err) => {
