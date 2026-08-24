@@ -1,0 +1,1 @@
+ALTER TABLE "bto" ADD COLUMN "barang" text;

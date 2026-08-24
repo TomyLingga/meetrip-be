@@ -1,0 +1,1167 @@
+{
+	"info": {
+		"_postman_id": "8c5b2a2e-4bdf-4a1e-8ad2-1b1572eb1f7a",
+		"name": "MeeTrip API Collection",
+		"description": "Postman Collection untuk seluruh endpoint MeeTrip API (Calendar of Meeting & Business Trip).",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Auth / SSO",
+			"item": [
+				{
+					"name": "SSO Login",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ssoToken\": \"{{ssoToken}}\",\n  \"appId\": \"{{appId}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"login"
+							]
+						},
+						"description": "Verifikasi token SSO dari Portal dan dapatkan local session token."
+					},
+					"response": []
+				},
+				{
+					"name": "Refresh Session Token",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/refresh",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"refresh"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Me Info",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/me",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"me"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Master Data",
+			"item": [
+				{
+					"name": "Get Grades",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/master/ref-grade",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"master",
+								"ref-grade"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Grade",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"kode\": \"G6\",\n  \"label\": \"Grade 6\",\n  \"level\": 6,\n  \"keterangan\": \"Staff Senior\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/master/ref-grade",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"master",
+								"ref-grade"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Transports",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/master/ref-transport",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"master",
+								"ref-transport"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Rincian Biaya",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/master/ref-rincian-biaya",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"master",
+								"ref-rincian-biaya"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Pagu List",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/master/ref-pagu",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"master",
+								"ref-pagu"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Pagu",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"rincianId\": \"rincian-uuid-here\",\n  \"gradeId\": \"grade-uuid-here\",\n  \"wilayahTipe\": \"dalam_wilayah\",\n  \"nilai\": 50000,\n  \"useDollar\": false,\n  \"isUnlimited\": false\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/master/ref-pagu",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"master",
+								"ref-pagu"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Ruang Meeting",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/master/ref-ruang-meeting",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"master",
+								"ref-ruang-meeting"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Business Trip Order (BTO)",
+			"item": [
+				{
+					"name": "Create BTO Draft",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"tujuanNama\": \"Kantor Cabang Medan\",\n  \"tujuanLat\": 3.5952,\n  \"tujuanLng\": 98.6722,\n  \"kepentingan\": \"Koordinasi & Rapat Evaluasi Bulanan\",\n  \"transportId\": \"transport-uuid-here\",\n  \"estBerangkat\": \"2026-07-01T08:00:00Z\",\n  \"estKembali\": \"2026-07-03T17:00:00Z\",\n  \"butuhDp\": true,\n  \"pemberiTugasId\": \"pt-employee-id\",\n  \"pemberiTugasNama\": \"Nama Pemberi Tugas\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/bto",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"bto"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List BTO",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/bto?page=1&limit=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"bto"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "10"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Detail BTO",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/bto/:id",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"bto",
+								":id"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "bto-uuid"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Submit BTO",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/bto/:id/submit",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"bto",
+								":id",
+								"submit"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "bto-uuid"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Approve DP (Admin)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"aksi\": \"approve\",\n  \"catatan\": \"Berkas DP lengkap dan disetujui\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/bto/:id/approve-dp",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"bto",
+								":id",
+								"approve-dp"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "bto-uuid"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Approve BTO (Pemberi Tugas)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"aksi\": \"approve\",\n  \"catatan\": \"Silahkan berangkat dinas\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/bto/:id/approve-pt",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"bto",
+								":id",
+								"approve-pt"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "bto-uuid"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Approve BTO (SDM)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"aksi\": \"approve\",\n  \"catatan\": \"Verifikasi SDM OK\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/bto/:id/approve-sdm",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"bto",
+								":id",
+								"approve-sdm"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "bto-uuid"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get BTO Pagu List",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/bto/:id/pagu",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"bto",
+								":id",
+								"pagu"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "bto-uuid"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Down Payment (DP)",
+			"item": [
+				{
+					"name": "Get DP Detail",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/dp/bto/:btoId",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"dp",
+								"bto",
+								":btoId"
+							],
+							"variable": [
+								{
+									"key": "btoId",
+									"value": "bto-uuid"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Save DP Rincian",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"exchangeRateUsd\": 16500,\n  \"rincian\": [\n    {\n      \"rincianId\": \"rincian-hotel-uuid\",\n      \"rincianLabel\": \"Hotel\",\n      \"jumlahHari\": 2,\n      \"nilaiPerHari\": 500000,\n      \"nilaiTotal\": 1000000,\n      \"useDollar\": false,\n      \"paguSaatInput\": 1200000\n    },\n    {\n      \"rincianId\": \"rincian-makan-uuid\",\n      \"rincianLabel\": \"Makan\",\n      \"jumlahHari\": 3,\n      \"nilaiPerHari\": 100000,\n      \"nilaiTotal\": 300000,\n      \"useDollar\": false,\n      \"paguSaatInput\": 300000\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/dp/bto/:btoId",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"dp",
+								"bto",
+								":btoId"
+							],
+							"variable": [
+								{
+									"key": "btoId",
+									"value": "bto-uuid"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "SPDK",
+			"item": [
+				{
+					"name": "Issue SPDK (Admin)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"catatanAdmin\": \"Silahkan jalankan dinas sesuai jadwal\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/spdk/bto/:btoId",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"spdk",
+								"bto",
+								":btoId"
+							],
+							"variable": [
+								{
+									"key": "btoId",
+									"value": "bto-uuid"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Kabag Approve SPDK",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"aksi\": \"approve\",\n  \"catatan\": \"Approved by Kabag\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/spdk/:id/approve-kabag",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"spdk",
+								":id",
+								"approve-kabag"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "spdk-uuid"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Attend Stamp (GPS)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"latitude\": 3.59525,\n  \"longitude\": 98.67222,\n  \"isAdminOverride\": false\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/spdk/bto/:btoId/attend",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"spdk",
+								"bto",
+								"btoId",
+								"attend"
+							],
+							"variable": [
+								{
+									"key": "btoId",
+									"value": "bto-uuid"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "BTE (Expenses)",
+			"item": [
+				{
+					"name": "Save BTE Details",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"exchangeRateUsd\": 16500,\n  \"rincian\": [\n    {\n      \"rincianId\": \"rincian-hotel-uuid\",\n      \"rincianLabel\": \"Hotel\",\n      \"jumlahHari\": 2,\n      \"nilaiPerHari\": 450000,\n      \"nilaiTotal\": 900000,\n      \"useDollar\": false,\n      \"paguSaatInput\": 1200000\n    }\n  ],\n  \"biayaLain\": [\n    {\n      \"keterangan\": \"Sewa printer lokal\",\n      \"nilai\": 150000,\n      \"useDollar\": false\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/bte/bto/:btoId",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"bte",
+								"bto",
+								":btoId"
+							],
+							"variable": [
+								{
+									"key": "btoId",
+									"value": "bto-uuid"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Submit BTE",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/bte/:id/submit",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"bte",
+								":id",
+								"submit"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "bte-uuid"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Approve BTE (Admin)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"aksi\": \"approve\",\n  \"catatan\": \"Approved BTE\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/bte/:id/approve",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"bte",
+								":id",
+								"approve"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "bte-uuid"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Mark Paid BTE (Admin)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/bte/:id/mark-paid",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"bte",
+								":id",
+								"mark-paid"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "bte-uuid"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Meeting",
+			"item": [
+				{
+					"name": "Create Meeting",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"topik\": \"Meeting Koordinasi MeeTrip Project\",\n  \"mulai\": \"2026-07-10T09:00:00Z\",\n  \"selesai\": \"2026-07-10T11:00:00Z\",\n  \"ruangId\": \"ruang-meeting-uuid\",\n  \"ruangNama\": \"Ruang VIP\",\n  \"needSoundSystem\": true,\n  \"needZoom\": true,\n  \"zoomLink\": \"https://zoom.us/j/123456789\",\n  \"catatan\": \"Membahas integrasi SSO\",\n  \"partisipan\": [\n    {\n      \"nama\": \"John Doe\",\n      \"email\": \"john@inl.co.id\",\n      \"isExternal\": false\n    },\n    {\n      \"nama\": \"Vendor MeeTrip\",\n      \"email\": \"vendor@partner.com\",\n      \"isExternal\": true\n    }\n  ],\n  \"fasilitas\": [\n    {\n      \"tipe\": \"snack\",\n      \"qty\": 10,\n      \"catatan\": \"Snack basah\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/meeting",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"meeting"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Meetings",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/meeting?dateFrom=2026-07-01T00:00:00Z&dateTo=2026-07-31T23:59:59Z",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"meeting"
+							],
+							"query": [
+								{
+									"key": "dateFrom",
+									"value": "2026-07-01T00:00:00Z"
+								},
+								{
+									"key": "dateTo",
+									"value": "2026-07-31T23:59:59Z"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Check Room Conflict",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/meeting/check-ruang?ruangId=ruang-uuid&mulai=2026-07-10T09:00:00Z&selesai=2026-07-10T11:00:00Z",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"meeting",
+								"check-ruang"
+							],
+							"query": [
+								{
+									"key": "ruangId",
+									"value": "ruang-uuid"
+								},
+								{
+									"key": "mulai",
+									"value": "2026-07-10T09:00:00Z"
+								},
+								{
+									"key": "selesai",
+									"value": "2026-07-10T11:00:00Z"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Dashboard & Analytics",
+			"item": [
+				{
+					"name": "Get Summary",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/dashboard/summary",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"dashboard",
+								"summary"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Proyeksi Biaya IDR",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/dashboard/proyeksi-biaya",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"dashboard",
+								"proyeksi-biaya"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Realisasi Biaya IDR",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/dashboard/realisasi-biaya",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"dashboard",
+								"realisasi-biaya"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Export Excel",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/dashboard/export-excel?status=ACTIVE",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"dashboard",
+								"export-excel"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "ACTIVE"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://127.0.0.1:3003",
+			"type": "string"
+		},
+		{
+			"key": "token",
+			"value": "YOUR_JWT_TOKEN",
+			"type": "string"
+		},
+		{
+			"key": "refreshToken",
+			"value": "YOUR_REFRESH_TOKEN",
+			"type": "string"
+		},
+		{
+			"key": "ssoToken",
+			"value": "TOKEN_FROM_PORTAL",
+			"type": "string"
+		},
+		{
+			"key": "appId",
+			"value": "APP_UUID_MeeTrip",
+			"type": "string"
+		}
+	]
+}

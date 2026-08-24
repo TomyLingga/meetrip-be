@@ -1,0 +1,299 @@
+// ─── Routes: BTE (Business Trip Expense) ────────────────────────────────────
+import { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { getBteByBtoIdService, createOrUpdateBteService, submitBteService, adminApproveBteService, markBtePaidService } from '../services/bte.service';
+import { db } from '../db/connection';
+import { bte, bteApprovalLog, bteBiayaLain, bteRincian, bto, dp } from '../db/schema';
+import { desc, eq, inArray, sql } from 'drizzle-orm';
+import { ok, paginated, parsePagination } from '../utils/response';
+import { AppError } from '../utils/errorHandler';
+import path from 'path';
+import fs from 'fs';
+import { config } from '../config/env';
+import { assertBtoAccess } from '../services/access.service';
+
+const bteUpsertSchema = z.object({
+  tglBerangkat: z.string().optional(),
+  jamBerangkat: z.string().optional(),
+  tglKembali: z.string().optional(),
+  jamKembali: z.string().optional(),
+  exchangeRateUsd: z.number().nullable().optional(),
+  rincian: z.array(
+    z.object({
+      rincianId: z.string().uuid(),
+      rincianLabel: z.string().optional(),
+      kategori: z.string().optional(),
+      jumlahHari: z.number().int().min(1),
+      nilaiPerHari: z.number().min(0),
+      nilaiTotal: z.number().min(0),
+      useDollar: z.boolean(),
+      nilaiUsd: z.number().optional(),
+      paguSaatInput: z.number().optional(),
+      isUnlimited: z.boolean().optional(),
+      catatan: z.string().optional(),
+    })
+  ),
+  biayaLain: z.array(
+    z.object({
+      keterangan: z.string().min(1),
+      nilai: z.number().min(0),
+      useDollar: z.boolean(),
+      nilaiUsd: z.number().optional(),
+    })
+  ).optional(),
+});
+
+export default async function bteRoutes(fastify: FastifyInstance) {
+  /**
+   * GET /api/bte/admin/list — List BTE for admin review pages
+   *
+   * Dulu: ambil SEMUA baris bte lalu 4 query per baris (N+1) tanpa pagination,
+   * padahal sidebar admin memanggilnya tiap 30 detik. Sekarang berbatas halaman
+   * dan seluruh relasi diambil dengan 4 query batch (inArray), bukan per baris.
+   */
+  fastify.get('/admin/list', { preHandler: [fastify.authenticateAdmin] }, async (req, reply) => {
+    const { page, limit } = parsePagination(req.query as any);
+    const offset = (page - 1) * limit;
+
+    const [totalRow] = await db.select({ count: sql<number>`count(*)` }).from(bte);
+    const rows = await db.select().from(bte).orderBy(desc(bte.updatedAt)).limit(limit).offset(offset);
+
+    if (rows.length === 0) {
+      return reply.send(paginated([], page, limit, Number(totalRow?.count ?? 0)));
+    }
+
+    const bteIds = rows.map((r) => r.id);
+    const btoIds = Array.from(new Set(rows.map((r) => r.btoId)));
+
+    const [btoRows, dpRows, rincianRows, biayaLainRows] = await Promise.all([
+      db.select().from(bto).where(inArray(bto.id, btoIds)),
+      db.select().from(dp).where(inArray(dp.btoId, btoIds)),
+      db.select().from(bteRincian).where(inArray(bteRincian.bteId, bteIds)),
+      db.select().from(bteBiayaLain).where(inArray(bteBiayaLain.bteId, bteIds)),
+    ]);
+
+    const btoMap = new Map(btoRows.map((r) => [r.id, r]));
+    const dpMap = new Map(dpRows.map((r) => [r.btoId, r]));
+    const groupBy = <T extends { bteId: string }>(items: T[]) => {
+      const map = new Map<string, T[]>();
+      for (const item of items) {
+        const list = map.get(item.bteId) ?? [];
+        list.push(item);
+        map.set(item.bteId, list);
+      }
+      return map;
+    };
+    const rincianMap = groupBy(rincianRows);
+    const biayaLainMap = groupBy(biayaLainRows);
+
+    const result = rows.map((row) => ({
+      ...row,
+      bto: btoMap.get(row.btoId) ?? null,
+      dp: dpMap.get(row.btoId) ?? null,
+      bteRincian: rincianMap.get(row.id) ?? [],
+      bteBiayaLain: biayaLainMap.get(row.id) ?? [],
+    }));
+
+    return reply.send(paginated(result, page, limit, Number(totalRow?.count ?? 0)));
+  });
+
+  /** GET /api/bte/bto/:btoId — Dapatkan BTE */
+  fastify.get('/bto/:btoId', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { btoId } = req.params as { btoId: string };
+    await assertBtoAccess(btoId, { id: req.user.sub, employeeId: req.user.employeeId, role: req.user.role });
+    const result = await getBteByBtoIdService(btoId);
+    return reply.send(ok(result));
+  });
+
+  /** POST /api/bte/bto/:btoId — Create/Update BTE */
+  fastify.post('/bto/:btoId', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { btoId } = req.params as { btoId: string };
+    const data = bteUpsertSchema.parse(req.body);
+    const actor = { id: req.user.sub, nama: req.user.nama || '', gradeLevel: req.user.gradeLevel };
+    const isAdmin = (req.user.role || '').split(',').some(r => ['super_admin', 'admin'].includes(r));
+    const result = await createOrUpdateBteService(btoId, actor, isAdmin, {
+      ...data,
+      tglBerangkat: data.tglBerangkat ? new Date(data.tglBerangkat) : undefined,
+      tglKembali: data.tglKembali ? new Date(data.tglKembali) : undefined,
+    });
+    return reply.send(ok(result));
+  });
+
+  /** POST /api/bte/bto/:btoId/upload-laporan — Upload PDF Laporan Perjalanan Dinas */
+  fastify.post('/bto/:btoId/upload-laporan', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { btoId } = z.object({ btoId: z.string().uuid() }).parse(req.params);
+
+    // Verify the BTO exists and belongs to the caller BEFORE touching the filesystem.
+    // (Validating btoId as a UUID also prevents path traversal via the upload dir.)
+    const [btoRow] = await db.select().from(bto).where(eq(bto.id, btoId)).limit(1);
+    if (!btoRow) throw new AppError('BTO tidak ditemukan', 404);
+
+    const isAdmin = (req.user.role || '').split(',').some(r => ['super_admin', 'admin'].includes(r));
+    if (!isAdmin && btoRow.employeeId !== req.user.sub) {
+      throw new AppError('Tidak diizinkan mengupload laporan BTE ini', 403);
+    }
+
+    const data = await req.file();
+    if (!data) throw new AppError('File laporan tidak ditemukan', 400);
+
+    const ext = path.extname(data.filename);
+    if (ext.toLowerCase() !== '.pdf') {
+      throw new AppError('Laporan harus berupa file PDF', 400);
+    }
+
+    const uploadDir = path.resolve(config.upload.dir, 'bte', btoId);
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+    const filename = `laporan_${Date.now()}${ext}`;
+    const filepath = path.join(uploadDir, filename);
+
+    await new Promise<void>((resolve, reject) => {
+      const ws = fs.createWriteStream(filepath);
+      data.file.pipe(ws);
+      ws.on('finish', resolve);
+      ws.on('error', reject);
+    });
+
+    const fileRelativePath = `bte/${btoId}/${filename}`;
+
+    // Find or create BTE first
+    let bteRow = await db.query.bte.findFirst({ where: eq(bte.btoId, btoId) });
+    if (!bteRow) {
+      const [inserted] = await db.insert(bte).values({
+        btoId,
+        status: 'DRAFT',
+        laporanPath: fileRelativePath,
+        laporanNama: data.filename,
+      }).returning();
+      bteRow = inserted;
+    } else {
+      await db.update(bte).set({
+        laporanPath: fileRelativePath,
+        laporanNama: data.filename,
+        updatedAt: new Date(),
+      }).where(eq(bte.id, bteRow.id));
+    }
+
+    // Update BTO status to BTE_DRAFT if BTO is currently ATTENDED
+    if (btoRow.status === 'ATTENDED') {
+      await db.update(bto).set({ status: 'BTE_DRAFT', updatedAt: new Date() }).where(eq(bto.id, btoId));
+    }
+
+    return reply.send(ok({ path: fileRelativePath, nama: data.filename }));
+  });
+
+  /** POST /api/bte/bto/:btoId/upload-kuitansi — Upload Scan Kuitansi (1 PDF/image) */
+  fastify.post('/bto/:btoId/upload-kuitansi', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { btoId } = req.params as { btoId: string };
+    const [btoRow] = await db.select().from(bto).where(eq(bto.id, btoId)).limit(1);
+    if (!btoRow) throw new AppError('BTO tidak ditemukan', 404);
+
+    const isAdmin = (req.user.role || '').split(',').some(r => ['super_admin', 'admin'].includes(r));
+    if (!isAdmin && btoRow.employeeId !== req.user.sub) {
+      throw new AppError('Tidak diizinkan mengupload kuitansi BTE ini', 403);
+    }
+
+    const existingBte = await db.query.bte.findFirst({ where: eq(bte.btoId, btoId) });
+    const canUpload =
+      btoRow.status === 'ATTENDED' ||
+      btoRow.status === 'REPORT_UPLOADED' ||
+      btoRow.status === 'BTE_DRAFT' ||
+      existingBte?.status === 'REVISION';
+    if (!isAdmin && !canUpload) {
+      throw new AppError('Kuitansi hanya bisa diupload setelah absen dihadiri (attended), pengisian BTE, atau revisi BTE', 400);
+    }
+
+    const data = await req.file();
+    if (!data) throw new AppError('File kuitansi tidak ditemukan', 400);
+
+    const uploadDir = path.resolve(config.upload.dir, 'bte', btoId);
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+    const ext = path.extname(data.filename).toLowerCase();
+    const allowedExt = new Set(['.pdf', '.png', '.jpg', '.jpeg', '.webp']);
+    if (!allowedExt.has(ext)) {
+      throw new AppError('Kuitansi/receipt wajib berupa PDF atau gambar (PNG/JPG/WEBP)', 400);
+    }
+    const filename = `kuitansi_${Date.now()}${ext}`;
+    const filepath = path.join(uploadDir, filename);
+
+    await new Promise<void>((resolve, reject) => {
+      const ws = fs.createWriteStream(filepath);
+      data.file.pipe(ws);
+      ws.on('finish', resolve);
+      ws.on('error', reject);
+    });
+
+    const fileRelativePath = `bte/${btoId}/${filename}`;
+    
+    let bteRow = existingBte;
+    if (!bteRow) {
+      const [inserted] = await db.insert(bte).values({
+        btoId,
+        status: 'DRAFT',
+        kuitansiPath: fileRelativePath,
+        kuitansiNama: data.filename,
+      }).returning();
+      bteRow = inserted;
+    } else {
+      await db.update(bte).set({
+        kuitansiPath: fileRelativePath,
+        kuitansiNama: data.filename,
+        updatedAt: new Date(),
+      }).where(eq(bte.id, bteRow.id));
+    }
+
+    return reply.send(ok({ path: fileRelativePath, nama: data.filename }));
+  });
+
+  /** POST /api/bte/:id/submit — Submit BTE */
+  fastify.post('/:id/submit', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const actor = { id: req.user.sub, nama: req.user.nama || '' };
+    const isAdmin = (req.user.role || '').split(',').some(r => ['super_admin', 'admin'].includes(r));
+    const result = await submitBteService(id, actor, isAdmin);
+    return reply.send(ok({ message: 'BTE diajukan', ...result }));
+  });
+
+  /** POST /api/bte/review/:id — Compatibility endpoint for admin BTE review */
+  fastify.post('/review/:id', { preHandler: [fastify.authenticateAdmin] }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { aksi, catatan } = z.object({
+      aksi: z.enum(['approve', 'reject', 'revision']),
+      catatan: z.string().optional(),
+    }).parse(req.body);
+    const actor = { id: req.user.sub, nama: req.user.nama || '' };
+    const result = await adminApproveBteService(id, aksi, actor, catatan);
+    return reply.send(ok(result));
+  });
+
+  /** POST /api/bte/:id/approve — Admin Approve/Reject/Revision BTE */
+  fastify.post('/:id/approve', { preHandler: [fastify.authenticateAdmin] }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { aksi, catatan } = z.object({
+      aksi: z.enum(['approve', 'reject', 'revision']),
+      catatan: z.string().optional(),
+    }).parse(req.body);
+    const actor = { id: req.user.sub, nama: req.user.nama || '' };
+    const result = await adminApproveBteService(id, aksi, actor, catatan);
+    return reply.send(ok(result));
+  });
+
+  /** POST /api/bte/:id/mark-paid — Admin mark paid */
+  fastify.post('/:id/mark-paid', { preHandler: [fastify.authenticateAdmin] }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const actor = { id: req.user.sub, nama: req.user.nama || '' };
+    await markBtePaidService(id, actor);
+    return reply.send(ok({ message: 'Pembayaran terkonfirmasi' }));
+  });
+
+  /** GET /api/bte/:id/logs — Get BTE logs */
+  fastify.get('/:id/logs', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const [bteRow] = await db.select({ btoId: bte.btoId }).from(bte).where(eq(bte.id, id)).limit(1);
+    if (!bteRow) throw new AppError('BTE tidak ditemukan', 404);
+    await assertBtoAccess(bteRow.btoId, { id: req.user.sub, employeeId: req.user.employeeId, role: req.user.role });
+    const rows = await db.select().from(bteApprovalLog).where(eq(bteApprovalLog.bteId, id));
+    return reply.send(ok(rows));
+  });
+}

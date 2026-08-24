@@ -1,0 +1,1 @@
+ALTER TABLE "local_user_cache" ADD COLUMN "foto_path" varchar(255);

@@ -1,0 +1,1 @@
+ALTER TYPE "bto_status" ADD VALUE 'REVISION_BTE';
