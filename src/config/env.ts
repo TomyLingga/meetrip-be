@@ -3,6 +3,10 @@ import 'dotenv/config'
 // Trigger restart for env reload
 import { z } from 'zod'
 
+// Nilai kosong ("PHOTON_URL=") diperlakukan sama dengan tidak diisi → pakai default.
+const urlOrDefault = (fallback: string) =>
+  z.preprocess(value => (value === '' ? undefined : value), z.string().url().default(fallback))
+
 const envSchema = z.object({
   DB_HOST: z.string(),
   DB_PORT: z.coerce.number().default(5432),
@@ -26,6 +30,17 @@ const envSchema = z.object({
 
   PORTAL_API_URL: z.string().url(),
   SSO_INTERNAL_TOKEN: z.string().default('secret_development_token'),
+
+  // Peta & lokasi (services/geo.service.ts). Default memakai layanan publik
+  // berbasis OpenStreetMap yang gratis; ganti URL-nya bila sudah self-host.
+  PHOTON_URL:    urlOrDefault('https://photon.komoot.io'),
+  NOMINATIM_URL: urlOrDefault('https://nominatim.openstreetmap.org'),
+  // Kosong = jarak garis lurus (haversine). Isi dengan OSRM self-host untuk jarak jalan.
+  OSRM_URL:      z.union([z.literal(''), z.string().url()]).default(''),
+  // Nominatim & Photon mewajibkan User-Agent yang mengidentifikasi aplikasi.
+  GEO_USER_AGENT: z.string().default('MeeTrip/1.0 (PT Industri Nabati Lestari)'),
+  // Opsional. Hanya dipakai sebagai cadangan terakhir reverse geocode bila
+  // Nominatim & BigDataCloud gagal, supaya deteksi wilayah (acuan pagu) tetap jalan.
   GOOGLE_MAPS_API_KEY: z.string().default(''),
 
   // Comma-separated list of allowed browser origins for CORS.
@@ -80,6 +95,12 @@ export const config = {
   },
   cors: {
     origins: d.CORS_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean),
+  },
+  geo: {
+    photonUrl:    d.PHOTON_URL.replace(/\/+$/, ''),
+    nominatimUrl: d.NOMINATIM_URL.replace(/\/+$/, ''),
+    osrmUrl:      d.OSRM_URL.replace(/\/+$/, ''),
+    userAgent:    d.GEO_USER_AGENT,
   },
   googleMaps: {
     apiKey: d.GOOGLE_MAPS_API_KEY,

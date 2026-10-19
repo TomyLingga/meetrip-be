@@ -1,0 +1,12 @@
+# OSRM self-host untuk jarak jalan MeeTrip (lihat README.md di folder ini).
+# Jalankan SETELAH data .osrm selesai diproses (langkah 1–2 di README).
+services:
+  osrm:
+    image: ghcr.io/project-osrm/osrm-backend:v5.27.1
+    container_name: osrm-sumatra
+    command: osrm-routed --algorithm mld --max-table-size 1000 /data/sumatra-latest.osrm
+    volumes:
+      - ./data:/data
+    ports:
+      - "5000:5000"
+    restart: unless-stopped

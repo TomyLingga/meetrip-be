@@ -5,7 +5,7 @@ import { bto, btoApprovalLog, dp, dpApprovalLog, localUserCache, configPemberiTu
 import { eq, desc, and, gte, lte, like, or, sql, inArray } from 'drizzle-orm'
 import { AppError }  from '../utils/errorHandler'
 import { generateNomor } from '../utils/romanNumeral'
-import { reverseGeocode, getWilayahTipe, haversineKm, resolveEmployeePenempatan } from './geocoding.service'
+import { reverseGeocode, getWilayahTipe, travelDistance, resolveEmployeePenempatan } from './geocoding.service'
 import { config as appConfig } from '../config/env'
 import { getGradeIdByLevel, hitungDurasiHariMalam, validateRincianAgainstPagu } from './pagu.service'
 import { ensureApproverSpdkConfig, resolveSpdkApproverKabag } from './spdk.service'
@@ -272,10 +272,10 @@ export async function submitBtoService(id: string, actor: { id: string; nama: st
   if (existing.jarakKm) {
     jarakKm = Number(existing.jarakKm)
   } else if (penempatanLat != null && penempatanLng != null) {
-    jarakKm = haversineKm(
-      penempatanLat, penempatanLng,
-      Number(existing.tujuanLat), Number(existing.tujuanLng),
-    )
+    jarakKm = (await travelDistance(
+      { lat: penempatanLat, lng: penempatanLng },
+      { lat: Number(existing.tujuanLat), lng: Number(existing.tujuanLng) },
+    )).km
   }
 
   if (existing.butuhDp) {

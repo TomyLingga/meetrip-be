@@ -1,96 +1,18 @@
+// ─── Geocoding Service ────────────────────────────────────────────────────────
+// Reverse geocode koordinat → nama provinsi & negara
+// Menentukan wilayah_tipe: dalam_wilayah | luar_wilayah | luar_negeri
+// Provider, cache, dan jarak tempuh ada di geo.service.ts.
 import { config } from '../config/env'
 import { db } from '../db/connection'
 import { localUserCache } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import { fetchWithTimeout } from '../utils/http'
+import { reverseGeocode } from './geo.service'
 
-export interface GeoResult {
-  alamat:      string
-  provinsi:    string | null
-  negara:      string | null
-  countryCode: string | null
-}
-
-interface GoogleGeocodeResponse {
-  status: string
-  results?: Array<{
-    formatted_address?: string
-    address_components: Array<{ long_name: string; short_name: string; types: string[] }>
-  }>
-}
-
-/**
- * Perform reverse geocoding to resolve address, province, country, and ISO country code
- * using Google Maps API with BigDataCloud & OpenStreetMap Nominatim fallbacks.
- */
-export async function reverseGeocode(lat: number, lng: number): Promise<GeoResult> {
-  // Primary Provider: Google Maps API
-  if (config.googleMaps.apiKey) {
-    try {
-      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${config.googleMaps.apiKey}&language=id`
-      const res  = await fetchWithTimeout(url)
-      const json = await res.json() as GoogleGeocodeResponse
-
-      if (json.status === 'OK' && json.results?.length) {
-        const result     = json.results[0]
-        const components = result.address_components
-
-        const provinsiObj = components.find(c => c.types.includes('administrative_area_level_1'))
-        const negaraObj   = components.find(c => c.types.includes('country'))
-
-        return {
-          alamat:      result.formatted_address ?? '',
-          provinsi:    provinsiObj?.long_name ?? null,
-          negara:      negaraObj?.long_name ?? null,
-          countryCode: negaraObj?.short_name ?? null,
-        }
-      }
-    } catch (err) {
-      console.error('[Geocoding] Google Maps Reverse Geocode error:', err)
-    }
-  }
-
-  // High-performance Fallback Provider: BigDataCloud API
-  try {
-    const bdcUrl = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=id`
-    const bdcRes = await fetchWithTimeout(bdcUrl, { headers: { 'User-Agent': 'MeeTrip-SSO/1.0 (contact@inl.co.id)' } }, 3000)
-    if (bdcRes.ok) {
-      const bdc = await bdcRes.json() as any
-      if (bdc && (bdc.countryName || bdc.countryCode)) {
-        const alamat = [bdc.locality || bdc.city, bdc.principalSubdivision, bdc.countryName].filter(Boolean).join(', ')
-        return {
-          alamat:      alamat || bdc.countryName || '',
-          provinsi:    bdc.principalSubdivision || null,
-          negara:      bdc.countryName || null,
-          countryCode: bdc.countryCode || null,
-        }
-      }
-    }
-  } catch (err) {
-    console.error('[Geocoding] BigDataCloud Reverse Geocode error:', err)
-  }
-
-  // OpenStreetMap Nominatim Fallback
-  try {
-    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=id`
-    const res = await fetchWithTimeout(url, { headers: { 'User-Agent': 'MeeTrip-SSO/1.0 (contact@inl.co.id)' } }, 4000)
-    if (res.ok) {
-      const json = await res.json() as any
-      if (json && json.address) {
-        return {
-          alamat:      json.display_name || '',
-          provinsi:    json.address.state || json.address.province || json.address.region || null,
-          negara:      json.address.country || json.address.country_name || null,
-          countryCode: json.address.country_code ? json.address.country_code.toUpperCase() : null,
-        }
-      }
-    }
-  } catch (err) {
-    console.error('[Geocoding] OSM Nominatim Reverse Geocode error:', err)
-  }
-
-  return { alamat: '', provinsi: null, negara: null, countryCode: null }
-}
+// Reverse geocode (cache DB → Nominatim → BigDataCloud → Google opsional) dan
+// jarak tempuh ada di geo.service.ts; diekspor ulang agar pemanggil lama tetap jalan.
+export { reverseGeocode, haversineKm, travelDistance } from './geo.service'
+export type { ReverseResult as GeoResult } from './geo.service'
 
 /**
  * Dynamically determines business trip region classification (dalam_wilayah | luar_wilayah | luar_negeri)
@@ -201,6 +123,8 @@ export async function resolveEmployeePenempatan(portalUserId: string): Promise<{
     }
   }
 
+  // Nilai cache disimpan saat SSO berhasil, jadi tetap dapat menjadi acuan ketika
+  // layanan reverse geocoding sedang tidak tersedia.
   let provinsi: string | null = userCache?.penempatanProvinsi ?? null
   let negara: string | null = null
   let countryCode: string | null = null
@@ -217,23 +141,4 @@ export async function resolveEmployeePenempatan(portalUserId: string): Promise<{
   }
 
   return { lat, lng, provinsi, negara, countryCode, nama }
-}
-
-/**
- * Calculates Haversine distance in kilometers between two geographic points.
- */
-export function haversineKm(
-  lat1: number, lng1: number,
-  lat2: number, lng2: number,
-): number {
-  const R    = 6371 // Earth radius in km
-  const dLat = toRad(lat2 - lat1)
-  const dLng = toRad(lng2 - lng1)
-  const a    = Math.sin(dLat / 2) ** 2
-             + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
-
-function toRad(deg: number): number {
-  return deg * Math.PI / 180
 }

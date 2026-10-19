@@ -7,7 +7,7 @@ import {
   listBtoService, listBtoApprovalsService, listBtoApprovalsHistoryService,
 } from '../services/bto.service'
 import { kalkulasiPaguBto, getGradeIdByLevel, hitungDurasiHariMalam } from '../services/pagu.service'
-import { reverseGeocode, getWilayahTipe, haversineKm, resolveEmployeePenempatan } from '../services/geocoding.service'
+import { reverseGeocode, getWilayahTipe, travelDistance, resolveEmployeePenempatan } from '../services/geocoding.service'
 import { db } from '../db/connection'
 import { attendStamp, bte, bteApprovalLog, bto, btoApprovalLog, configPemberiTugas, localUserCache, spdk, spdkApprovalLog } from '../db/schema'
 import { eq, and, or, inArray, desc } from 'drizzle-orm'
@@ -260,7 +260,7 @@ export default async function btoRoutes(fastify: FastifyInstance) {
 
     let jarakKm = 0
     if (pLat != null && pLng != null) {
-      jarakKm = haversineKm(pLat, pLng, lat, lng)
+      jarakKm = (await travelDistance({ lat: pLat, lng: pLng }, { lat, lng })).km
     }
 
     const wilayahTipe = getWilayahTipe(pProv, geo.provinsi, geo.negara, lat, lng, geo.countryCode, pNegara, pCountryCode)
@@ -624,10 +624,10 @@ export default async function btoRoutes(fastify: FastifyInstance) {
     }
 
     if (penempatanLat != null && penempatanLng != null && tujuanLat && tujuanLng) {
-      jarakKm = haversineKm(
-        penempatanLat, penempatanLng,
-        Number(tujuanLat), Number(tujuanLng),
-      )
+      jarakKm = (await travelDistance(
+        { lat: penempatanLat, lng: penempatanLng },
+        { lat: Number(tujuanLat), lng: Number(tujuanLng) },
+      )).km
     }
 
     const start = new Date(estBerangkat)
